@@ -16,34 +16,34 @@ export async function POST(req: Request) {
       payload = {
         model: model || "llama3",
         messages: messages,
-        stream: false,
+        stream: true,
       };
     } else if (provider === "openrouter") {
-      if (!apiKey) {
-        throw new Error("API Key is required for OpenRouter");
-      }
+      if (!apiKey) throw new Error("API Key is required for OpenRouter");
       apiUrl = "https://openrouter.ai/api/v1/chat/completions";
       headers["Authorization"] = `Bearer ${apiKey}`;
-      
-      // Map system messages if necessary or just pass directly
       payload = {
         model: model || "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
         messages: messages,
-        stream: false,
+        stream: true,
       };
     } else if (provider === "custom") {
-      if (!apiKey) {
-        throw new Error("API Key is required for Cloud APIs");
-      }
-      // Assuming a generic OpenAI-compatible endpoint if they put a custom one
-      // Wait, we need a base URL for custom. Let's just stick to OpenRouter and Ollama for now to keep it simple, 
-      // or we can allow Together AI.
+      if (!apiKey) throw new Error("API Key is required for Cloud APIs");
       apiUrl = "https://api.together.xyz/v1/chat/completions";
       headers["Authorization"] = `Bearer ${apiKey}`;
       payload = {
         model: model,
         messages: messages,
-        stream: false,
+        stream: true,
+      };
+    } else if (provider === "groq") {
+      if (!apiKey) throw new Error("API Key is required for Groq");
+      apiUrl = "https://api.groq.com/openai/v1/chat/completions";
+      headers["Authorization"] = `Bearer ${apiKey}`;
+      payload = {
+        model: model || "mixtral-8x7b-32768",
+        messages: messages,
+        stream: true,
       };
     } else {
       throw new Error("Invalid provider selected");
@@ -55,23 +55,77 @@ export async function POST(req: Request) {
       body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      throw new Error(data.error?.message || data.error || `API error: ${response.statusText}`);
+      const errData = await response.text();
+      let errorMsg = `API error: ${response.statusText}`;
+      try {
+        const parsed = JSON.parse(errData);
+        errorMsg = parsed.error?.message || parsed.error || errorMsg;
+      } catch (e) {
+        errorMsg = errData || errorMsg;
+      }
+      return NextResponse.json({ error: "API Error", details: errorMsg }, { status: response.status });
     }
 
-    let assistantContent = "";
-    if (provider === "ollama") {
-      assistantContent = data.message?.content || "";
-    } else {
-      assistantContent = data.choices?.[0]?.message?.content || "";
-    }
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = response.body?.getReader();
+        if (!reader) {
+          controller.close();
+          return;
+        }
+        
+        const decoder = new TextDecoder();
+        let buffer = "";
 
-    return NextResponse.json({
-      role: "assistant",
-      content: assistantContent,
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || "";
+          
+          for (const line of lines) {
+            if (provider === "ollama") {
+              if (line.trim() === "") continue;
+              try {
+                const parsed = JSON.parse(line);
+                if (parsed.message?.content) {
+                  controller.enqueue(new TextEncoder().encode(parsed.message.content));
+                }
+              } catch (e) {
+                // Ignore parse errors on partial chunks
+              }
+            } else {
+              if (line.startsWith("data: ")) {
+                const dataStr = line.slice(6).trim();
+                if (dataStr === "[DONE]") continue;
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    controller.enqueue(new TextEncoder().encode(content));
+                  }
+                } catch (e) {
+                  // Ignore parse errors
+                }
+              }
+            }
+          }
+        }
+        controller.close();
+      }
     });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
+
   } catch (error: any) {
     console.error("Error communicating with AI provider:", error);
     return NextResponse.json(
