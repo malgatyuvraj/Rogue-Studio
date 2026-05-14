@@ -8,11 +8,19 @@
 
 # Rogue Studio
 
-> Open-source AI workspace for local and cloud models, runnable code artifacts, and in-browser model-forge workflows.
+> Create anything with Rogue Studio. Use local or cloud models, generate runnable artifacts, and keep the full build loop in one open-source workspace.
+
+**The core idea is simple:** build what you want, inspect the output, run it, fix it, and keep moving without getting boxed in by provider lock-in or a fragmented toolchain.
 
 Rogue Studio is a single interface for building with models, inspecting generated files, running code locally, and launching Heretic-powered forge jobs without bouncing between tools.
 
 It is designed for people who want a fast feedback loop: prompt, inspect the artifact, run it, fix it, and keep moving.
+
+## Create Anything With Rogue Studio
+
+Rogue Studio is built for open-ended creation. Start with an idea, choose the model stack you want, generate code or content, run it locally, and iterate inside the same interface.
+
+If the project goal is flexibility, speed, and control, that is the point of Rogue Studio.
 
 <p align="center">
   <a href="#quick-start"><strong>Quick start</strong></a>
