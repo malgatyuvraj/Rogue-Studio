@@ -1,146 +1,178 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" />
-  <img src="https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript" />
-  <img src="https://img.shields.io/badge/Tailwind-4-38bdf8?style=for-the-badge&logo=tailwindcss" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+  <a href="https://github.com/malgatyuvraj/Rogue-Studio/stargazers"><img src="https://img.shields.io/github/stars/malgatyuvraj/Rogue-Studio?style=for-the-badge" alt="GitHub stars" /></a>
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/React-19-149eca?style=for-the-badge&logo=react" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178c6?style=for-the-badge&logo=typescript" alt="TypeScript 5" />
+  <img src="https://img.shields.io/badge/License-MIT-16a34a?style=for-the-badge" alt="MIT License" />
 </p>
 
-# 🔴 Rogue Studio
+# Rogue Studio
 
-> **The Unrestricted AI Builder** — An open-source, multi-provider AI development platform with local code execution, concept abliteration research integration, and a real-time artifact system.
+> Open-source AI workspace for local and cloud models, runnable code artifacts, and in-browser model-forge workflows.
 
-## ✨ Features
+Rogue Studio is a single interface for building with models, inspecting generated files, running code locally, and launching Heretic-powered forge jobs without bouncing between tools.
 
-### 🤖 Multi-Provider Engine
-Connect to any major AI provider through a unified interface:
-- **Local (Ollama)** — Run abliterated models directly on your machine with zero latency
-- **OpenAI** — GPT-4o, GPT-4 Turbo
-- **Anthropic** — Claude 3.5 Sonnet, Claude 3 Opus
-- **Google Gemini** — Gemini 2.5 Flash
-- **OpenRouter** — Access 100+ models through a single API
-- **Groq** — Ultra-fast inference
+It is designed for people who want a fast feedback loop: prompt, inspect the artifact, run it, fix it, and keep moving.
 
-### 🔨 The Model Forge
-Integrated UI for running [heretic-master](https://github.com/p-e-w/heretic) abliteration pipelines. Paste any Hugging Face model ID and watch the process stream live in a built-in terminal.
+<p align="center">
+  <a href="#quick-start"><strong>Quick start</strong></a>
+  ·
+  <a href="#what-you-get"><strong>What you get</strong></a>
+  ·
+  <a href="#how-it-works"><strong>How it works</strong></a>
+  ·
+  <a href="#contributing"><strong>Contributing</strong></a>
+</p>
 
-### ⚡ Local Code Execution Sandbox
-Execute generated Python, JavaScript, and Bash scripts directly from the artifact panel with one click. Includes:
-- Real-time `stdout` / `stderr` output
-- 30-second timeout protection
-- **Agentic Auto-Fix** — When code fails, click "Auto-Fix" to have the AI automatically analyze the error and regenerate a corrected version
+## Why Rogue Studio
 
-### 📦 Real-Time Artifact System
-- Live syntax-highlighted code viewer (powered by Prism)
-- Multi-file tab navigation
-- One-click Copy & Download
-- CRT scanline overlay for aesthetic flair
+- One workspace for local models and hosted APIs.
+- Artifact-first chat flow with extracted code blocks, file tabs, copy, and download actions.
+- Built-in execution loop for Python, JavaScript, and Bash.
+- Streaming forge panel for running Heretic jobs from the UI.
+- Browser-local API key storage for provider credentials.
+- Clean Next.js codebase that is easy to fork, theme, and extend.
 
-### 🎨 Premium Dark UI
-- Glassmorphism design system
-- Framer Motion animations throughout
-- Fully responsive (mobile, tablet, desktop)
-- Custom scrollbars and micro-interactions
+## What You Get
 
-## 🚀 Getting Started
+| Capability | What it does |
+| --- | --- |
+| Multi-provider chat | Switch between Ollama, OpenAI, Anthropic, Gemini, OpenRouter, and Groq from one interface. |
+| Live artifacts | Automatically extracts code blocks from model output and presents them in a syntax-highlighted panel. |
+| Local execution | Runs Python, JavaScript, and Bash directly from the artifact panel and streams `stdout` and `stderr` back into the UI. |
+| Model Forge | Sends Heretic jobs through a built-in terminal-style stream so you can launch model workflows from the browser. |
+| Responsive interface | Works across desktop and mobile layouts with an app-like sidebar and sheet pattern. |
+
+## Quick Start
 
 ### Prerequisites
-- **Node.js** ≥ 18
-- **npm** or **pnpm**
-- (Optional) [Ollama](https://ollama.com) for local model inference
 
-### Installation
+- Node.js 18 or newer
+- npm or pnpm
+- Optional: [Ollama](https://ollama.com) for local inference
+- Optional: [uv](https://docs.astral.sh/uv/) plus a local [Heretic](https://github.com/p-e-w/heretic) checkout for the forge workflow
+
+### Install and run
 
 ```bash
-# Clone the repository
 git clone https://github.com/malgatyuvraj/Rogue-Studio.git
 cd Rogue-Studio
-
-# Install dependencies
 npm install
-
-# Start the development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open `http://localhost:3000`.
 
-### Running Local Models (Recommended)
+### Run with local models
 
 ```bash
-# Install Ollama (macOS)
+# macOS
 brew install ollama
 
-# Pull a recommended abliterated model
+# Pull and run a recommended model
 ollama run hf.co/p-e-w/gemma-3-12b-it-heretic-GGUF
 ```
 
-Then select **"Local (Ollama / Heretic)"** as your engine provider in the sidebar.
+Then choose `Local (Ollama / Heretic)` inside the app.
 
-### Using Cloud Providers
+### Use cloud providers
 
-1. Select a provider (OpenAI, Anthropic, Gemini, etc.) from the sidebar
-2. Enter your API key
-3. Choose or type a model ID
-4. Start prompting
+1. Select a provider in the sidebar.
+2. Paste an API key.
+3. Enter the model ID you want to use.
+4. Start prompting.
 
-> **Note:** API keys are stored in your browser's `localStorage` only — they are never sent to any server other than the provider you selected.
+API keys are stored in browser `localStorage` and sent only to the provider you choose.
 
-## 🏗️ Project Structure
+## Forge Setup
 
+The forge route is wired to run Heretic locally and stream logs back into the UI.
+
+To use it, make sure you have:
+
+- `uv` installed
+- a working `heretic-master` checkout on your machine
+- the path in [src/app/api/forge/route.ts](src/app/api/forge/route.ts) aligned with your local directory layout
+
+If you already keep Heretic next to this repo, you are close. If your folders differ, update that path once and the forge UI will use your local setup.
+
+## Safety Notes
+
+- The execution route runs code on the machine hosting the app.
+- The current sandbox uses timeouts and temporary files, not container isolation.
+- Review generated code before running it, especially when using third-party model providers.
+
+That honesty matters in open source. A trustworthy README converts better than hype.
+
+## How It Works
+
+```text
+Prompt -> provider adapter -> streamed response -> artifact extraction -> optional local execution
+                                          \-> optional forge workflow -> streamed terminal output
 ```
+
+### App structure
+
+```text
 src/
-├── app/
-│   ├── page.tsx              # Main UI (chat, sidebar, artifact panel)
-│   ├── layout.tsx            # Root layout with fonts & metadata
-│   ├── globals.css           # Design tokens & glassmorphism utilities
-│   └── api/
-│       ├── chat/route.ts     # Multi-provider streaming chat endpoint
-│       ├── execute/route.ts  # Local code execution sandbox
-│       └── forge/route.ts    # Heretic abliteration pipeline interface
+  app/
+    page.tsx
+    layout.tsx
+    globals.css
+    api/
+      chat/route.ts
+      execute/route.ts
+      forge/route.ts
 ```
 
-## 🔧 API Routes
+### API routes
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/api/chat` | POST | Streams AI responses from any configured provider |
-| `/api/execute` | POST | Executes Python/JS/Bash code locally and returns output |
-| `/api/forge` | POST | Streams heretic-master abliteration process output via SSE |
+| Route | Method | Purpose |
+| --- | --- | --- |
+| `/api/chat` | `POST` | Streams model responses from the selected provider. |
+| `/api/execute` | `POST` | Executes Python, JavaScript, or Bash locally and returns output. |
+| `/api/forge` | `POST` | Streams Heretic forge logs over server-sent events. |
 
-## 📦 Tech Stack
+## Tech Stack
 
-| Technology | Purpose |
-|-----------|---------|
-| [Next.js 16](https://nextjs.org) | React framework with App Router |
-| [TypeScript 5](https://typescriptlang.org) | Type safety |
-| [Tailwind CSS 4](https://tailwindcss.com) | Utility-first styling |
-| [Framer Motion](https://motion.dev) | Animations & transitions |
-| [Prism React Renderer](https://github.com/FormidableLabs/prism-react-renderer) | Syntax highlighting |
-| [React Markdown](https://github.com/remarkjs/react-markdown) | Markdown rendering |
-| [Lucide React](https://lucide.dev) | Icon system |
+- [Next.js 16](https://nextjs.org)
+- [React 19](https://react.dev)
+- [TypeScript 5](https://www.typescriptlang.org)
+- [Tailwind CSS 4](https://tailwindcss.com)
+- [Framer Motion](https://motion.dev)
+- [Prism React Renderer](https://github.com/FormidableLabs/prism-react-renderer)
+- [React Markdown](https://github.com/remarkjs/react-markdown)
+- [Lucide React](https://lucide.dev)
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome, especially in these areas:
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- provider adapters and model presets
+- stronger execution isolation
+- artifact UX and file management
+- forge reliability and environment detection
+- onboarding polish, screenshots, and docs
 
-## 📄 License
+Typical workflow:
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+```bash
+git checkout -b feature/your-change
+npm run lint
+```
 
-## 🙏 Acknowledgments
+Open a pull request with a clear description of what changed and why.
 
-- [heretic-master](https://github.com/p-e-w/heretic) by p-e-w for the concept abliteration research
-- [Ollama](https://ollama.com) for making local model inference accessible
-- The open-source AI community
+## License
+
+Rogue Studio is released under the [MIT License](LICENSE).
+
+## Acknowledgments
+
+- [Heretic](https://github.com/p-e-w/heretic) for the forge workflow inspiration and local model tooling
+- [Ollama](https://ollama.com) for making local model serving simple
+- The open-source AI tooling community
 
 ---
 
-<p align="center">
-  Built with ❤️ by <a href="https://github.com/malgatyuvraj">@malgatyuvraj</a>
-</p>
+If Rogue Studio saves you time or gives you a better local AI workflow, star the repo. It helps more builders find the project.
