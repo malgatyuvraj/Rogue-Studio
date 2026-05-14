@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     fs.writeFileSync(filePath, code);
     
     try {
-      const { stdout, stderr } = await execAsync(command, { timeout: 30000 }); // 30 sec timeout
+      const { stdout, stderr } = await execAsync(command, { timeout: 120000, maxBuffer: 50 * 1024 * 1024 }); // 120 sec timeout, 50MB max output
       return NextResponse.json({ stdout, stderr });
     } catch (execError: any) {
       // If the command fails, child_process throws an error but it contains stdout/stderr

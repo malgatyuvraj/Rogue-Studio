@@ -52,6 +52,7 @@ export async function POST(req: Request) {
         model: model || "gpt-4o",
         messages: processedMessages,
         stream: true,
+        max_tokens: 16384,
       };
     } else if (provider === "anthropic") {
       if (!apiKey) throw new Error("API Key is required for Anthropic");
@@ -68,7 +69,7 @@ export async function POST(req: Request) {
         system: systemMessage,
         messages: nonSystemMessages,
         stream: true,
-        max_tokens: 4096
+        max_tokens: 8192
       };
     } else if (provider === "gemini") {
       if (!apiKey) throw new Error("API Key is required for Gemini");
@@ -102,6 +103,7 @@ export async function POST(req: Request) {
         model: model || "mixtral-8x7b-32768",
         messages: processedMessages,
         stream: true,
+        max_tokens: 32768,
       };
     } else {
       throw new Error("Invalid provider selected");
