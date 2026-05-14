@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "YourAI | The Unrestricted AI Builder",
-  description: "An open-source, fully uncensored AI platform. Build anything without restriction. Powered by Heretic.",
+  description: "An open-source AI development platform. Build anything with local or cloud models. Powered by concept abliteration research.",
 };
 
 export default function RootLayout({
@@ -25,9 +25,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>
     </html>
   );
 }

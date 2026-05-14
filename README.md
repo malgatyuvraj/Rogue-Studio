@@ -1,36 +1,146 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-16-black?style=for-the-badge&logo=next.js" />
+  <img src="https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript" />
+  <img src="https://img.shields.io/badge/Tailwind-4-38bdf8?style=for-the-badge&logo=tailwindcss" />
+  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" />
+</p>
 
-## Getting Started
+# 🔴 Rogue Studio
 
-First, run the development server:
+> **The Unrestricted AI Builder** — An open-source, multi-provider AI development platform with local code execution, concept abliteration research integration, and a real-time artifact system.
+
+## ✨ Features
+
+### 🤖 Multi-Provider Engine
+Connect to any major AI provider through a unified interface:
+- **Local (Ollama)** — Run abliterated models directly on your machine with zero latency
+- **OpenAI** — GPT-4o, GPT-4 Turbo
+- **Anthropic** — Claude 3.5 Sonnet, Claude 3 Opus
+- **Google Gemini** — Gemini 2.5 Flash
+- **OpenRouter** — Access 100+ models through a single API
+- **Groq** — Ultra-fast inference
+
+### 🔨 The Model Forge
+Integrated UI for running [heretic-master](https://github.com/p-e-w/heretic) abliteration pipelines. Paste any Hugging Face model ID and watch the process stream live in a built-in terminal.
+
+### ⚡ Local Code Execution Sandbox
+Execute generated Python, JavaScript, and Bash scripts directly from the artifact panel with one click. Includes:
+- Real-time `stdout` / `stderr` output
+- 30-second timeout protection
+- **Agentic Auto-Fix** — When code fails, click "Auto-Fix" to have the AI automatically analyze the error and regenerate a corrected version
+
+### 📦 Real-Time Artifact System
+- Live syntax-highlighted code viewer (powered by Prism)
+- Multi-file tab navigation
+- One-click Copy & Download
+- CRT scanline overlay for aesthetic flair
+
+### 🎨 Premium Dark UI
+- Glassmorphism design system
+- Framer Motion animations throughout
+- Fully responsive (mobile, tablet, desktop)
+- Custom scrollbars and micro-interactions
+
+## 🚀 Getting Started
+
+### Prerequisites
+- **Node.js** ≥ 18
+- **npm** or **pnpm**
+- (Optional) [Ollama](https://ollama.com) for local model inference
+
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/malgatyuvraj/Rogue-Studio.git
+cd Rogue-Studio
+
+# Install dependencies
+npm install
+
+# Start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Running Local Models (Recommended)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# Install Ollama (macOS)
+brew install ollama
 
-## Learn More
+# Pull a recommended abliterated model
+ollama run hf.co/p-e-w/gemma-3-12b-it-heretic-GGUF
+```
 
-To learn more about Next.js, take a look at the following resources:
+Then select **"Local (Ollama / Heretic)"** as your engine provider in the sidebar.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Using Cloud Providers
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Select a provider (OpenAI, Anthropic, Gemini, etc.) from the sidebar
+2. Enter your API key
+3. Choose or type a model ID
+4. Start prompting
 
-## Deploy on Vercel
+> **Note:** API keys are stored in your browser's `localStorage` only — they are never sent to any server other than the provider you selected.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🏗️ Project Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/
+├── app/
+│   ├── page.tsx              # Main UI (chat, sidebar, artifact panel)
+│   ├── layout.tsx            # Root layout with fonts & metadata
+│   ├── globals.css           # Design tokens & glassmorphism utilities
+│   └── api/
+│       ├── chat/route.ts     # Multi-provider streaming chat endpoint
+│       ├── execute/route.ts  # Local code execution sandbox
+│       └── forge/route.ts    # Heretic abliteration pipeline interface
+```
+
+## 🔧 API Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/chat` | POST | Streams AI responses from any configured provider |
+| `/api/execute` | POST | Executes Python/JS/Bash code locally and returns output |
+| `/api/forge` | POST | Streams heretic-master abliteration process output via SSE |
+
+## 📦 Tech Stack
+
+| Technology | Purpose |
+|-----------|---------|
+| [Next.js 16](https://nextjs.org) | React framework with App Router |
+| [TypeScript 5](https://typescriptlang.org) | Type safety |
+| [Tailwind CSS 4](https://tailwindcss.com) | Utility-first styling |
+| [Framer Motion](https://motion.dev) | Animations & transitions |
+| [Prism React Renderer](https://github.com/FormidableLabs/prism-react-renderer) | Syntax highlighting |
+| [React Markdown](https://github.com/remarkjs/react-markdown) | Markdown rendering |
+| [Lucide React](https://lucide.dev) | Icon system |
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [heretic-master](https://github.com/p-e-w/heretic) by p-e-w for the concept abliteration research
+- [Ollama](https://ollama.com) for making local model inference accessible
+- The open-source AI community
+
+---
+
+<p align="center">
+  Built with ❤️ by <a href="https://github.com/malgatyuvraj">@malgatyuvraj</a>
+</p>
