@@ -183,4 +183,6 @@ Rogue Studio is released under the [MIT License](LICENSE).
 
 ---
 
+Rogue Studio is an open-source project built for developers who want transparency, extensibility, and full control over their AI workflow.
+
 If Rogue Studio saves you time or gives you a better local AI workflow, star the repo. It helps more builders find the project.
