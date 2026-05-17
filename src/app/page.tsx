@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Send, Bot, User, ShieldAlert, FileCode2, AlertTriangle, 
   Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame, Skull,
-  FolderTree, File, Folder, ChevronRight, ChevronDown, RotateCcw, BrainCircuit, Cpu, RefreshCw
+  FolderTree, File, Folder, ChevronRight, ChevronDown, RotateCcw, BrainCircuit, Cpu, RefreshCw,
+  Plus, MessageSquare, Trash2, Eye, Code2
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
 import ReactMarkdown from "react-markdown";
@@ -21,7 +22,7 @@ interface FileNode {
 }
 
 interface AgentAction {
-  type: 'write_file' | 'read_file' | 'run_command' | 'done';
+  type: 'write_file' | 'read_file' | 'delete_file' | 'run_command' | 'done';
   path?: string;
   content?: string;
   command?: string;
@@ -34,6 +35,16 @@ interface AgentLogEntry {
   status: 'running' | 'success' | 'error';
   output?: string;
 }
+
+interface Conversation {
+  id: string;
+  title: string;
+  messages: {role: string, content: string}[];
+  createdAt: number;
+}
+
+// Max context messages sent to model API (sliding window)
+const AGENT_CONTEXT_WINDOW = 30;
 
 // Max iterations the agent can take before stopping (circuit breaker)
 const AGENT_MAX_ITERATIONS = 25;
@@ -52,10 +63,13 @@ file content here
 2. Read an existing file:
 <read_file path="relative/path/to/file.ext" />
 
-3. Run a shell command in the workspace:
+3. Delete a file or directory:
+<delete_file path="relative/path/to/file.ext" />
+
+4. Run a shell command in the workspace:
 <run_command>command here</run_command>
 
-4. Signal that the task is complete:
+5. Signal that the task is complete:
 <done>Summary of what was accomplished.</done>
 
 Rules:
@@ -146,6 +160,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionOutput, setExecutionOutput] = useState<{stdout: string, stderr: string} | null>(null);
+  const [artifactView, setArtifactView] = useState<'code' | 'preview'>('code');
 
   // Forge State
   const [isForgeOpen, setIsForgeOpen] = useState(false);
@@ -164,57 +179,131 @@ export default function Home() {
   const [rightPanel, setRightPanel] = useState<'artifacts' | 'workspace'>('artifacts');
   const agentAbortRef = useRef(false);
 
+  // ── Conversation History State ──
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string>("");
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Load from localStorage on mount
+  const DEFAULT_WELCOME = "Welcome to Rogue Studio. I am running in raw execution mode. Whether you want to build anything without restriction, conduct security research, or explore unfiltered concepts—I will provide direct, unfiltered responses. What are we creating today?";
+
+  // Load conversations from localStorage + API key from sessionStorage
   useEffect(() => {
-    const savedMessages = localStorage.getItem("rogue_messages");
-    if (savedMessages) {
+    // Load API key from sessionStorage (not persisted across browser sessions)
+    const savedApiKey = sessionStorage.getItem("rogue_api_key");
+    if (savedApiKey) setApiKey(savedApiKey);
+
+    // Load conversation history
+    const savedConvos = localStorage.getItem("rogue_conversations");
+    if (savedConvos) {
       try {
-        const parsed = JSON.parse(savedMessages);
+        const parsed: Conversation[] = JSON.parse(savedConvos);
         if (parsed.length > 0) {
-          setMessages(parsed);
-          // Extract code blocks from the last assistant message if available
-          for (let i = parsed.length - 1; i >= 0; i--) {
-            if (parsed[i].role === 'assistant') {
-              const blocks = extractCodeBlocks(parsed[i].content);
-              if (blocks.length > 0) {
-                setCodeBlocks(blocks);
-              }
+          setConversations(parsed);
+          // Load the most recent conversation
+          const latest = parsed[parsed.length - 1];
+          setActiveConversationId(latest.id);
+          setMessages(latest.messages);
+          // Extract code blocks from the last assistant message
+          for (let i = latest.messages.length - 1; i >= 0; i--) {
+            if (latest.messages[i].role === 'assistant') {
+              const blocks = extractCodeBlocks(latest.messages[i].content);
+              if (blocks.length > 0) setCodeBlocks(blocks);
               break;
             }
           }
+          return;
         }
-      } catch (e) {
-        // Ignore JSON parse errors
-      }
-    } else {
-      // Default initial message
-      setMessages([
-        { role: "assistant", content: "Welcome to Your AI. I am running in raw execution mode. Whether you want to build anything without restriction, conduct security research, or explore unfiltered concepts—I will provide direct, unfiltered responses. What are we creating today?" }
-      ]);
+      } catch (e) {}
     }
 
-    const savedApiKey = localStorage.getItem("rogue_api_key");
-    if (savedApiKey) {
-      setApiKey(savedApiKey);
+    // Migrate from old single-chat format
+    const oldMessages = localStorage.getItem("rogue_messages");
+    if (oldMessages) {
+      try {
+        const parsed = JSON.parse(oldMessages);
+        if (parsed.length > 0) {
+          const id = Date.now().toString();
+          const convo: Conversation = { id, title: 'Migrated Chat', messages: parsed, createdAt: Date.now() };
+          setConversations([convo]);
+          setActiveConversationId(id);
+          setMessages(parsed);
+          localStorage.removeItem("rogue_messages"); // Clean up old format
+          return;
+        }
+      } catch (e) {}
     }
+
+    // Fresh start
+    createNewConversation();
   }, []);
 
-  // Save to localStorage when state changes
+  // Save conversations to localStorage when they change
   useEffect(() => {
-    if (messages.length > 0) {
-      localStorage.setItem("rogue_messages", JSON.stringify(messages));
+    if (conversations.length > 0) {
+      localStorage.setItem("rogue_conversations", JSON.stringify(conversations));
     }
-  }, [messages]);
+  }, [conversations]);
 
+  // Sync current messages back into the active conversation
+  useEffect(() => {
+    if (!activeConversationId || messages.length === 0) return;
+    setConversations(prev => prev.map(c => 
+      c.id === activeConversationId 
+        ? { ...c, messages, title: c.title === 'New Chat' && messages.length > 1 ? (messages.find(m => m.role === 'user')?.content.slice(0, 40) || 'New Chat') : c.title }
+        : c
+    ));
+  }, [messages, activeConversationId]);
+
+  // API key in sessionStorage (secure: not persisted across sessions)
   useEffect(() => {
     if (apiKey) {
-      localStorage.setItem("rogue_api_key", apiKey);
+      sessionStorage.setItem("rogue_api_key", apiKey);
     } else {
-      localStorage.removeItem("rogue_api_key");
+      sessionStorage.removeItem("rogue_api_key");
     }
   }, [apiKey]);
+
+  const createNewConversation = () => {
+    const id = Date.now().toString();
+    const initialMessages = [{ role: "assistant", content: DEFAULT_WELCOME }];
+    const convo: Conversation = { id, title: 'New Chat', messages: initialMessages, createdAt: Date.now() };
+    setConversations(prev => [...prev, convo]);
+    setActiveConversationId(id);
+    setMessages(initialMessages);
+    setCodeBlocks([]);
+    setExecutionOutput(null);
+    setAgentLog([]);
+  };
+
+  const switchConversation = (id: string) => {
+    const convo = conversations.find(c => c.id === id);
+    if (!convo) return;
+    setActiveConversationId(id);
+    setMessages(convo.messages);
+    setCodeBlocks([]);
+    setExecutionOutput(null);
+    setAgentLog([]);
+    // Re-extract code blocks
+    for (let i = convo.messages.length - 1; i >= 0; i--) {
+      if (convo.messages[i].role === 'assistant') {
+        const blocks = extractCodeBlocks(convo.messages[i].content);
+        if (blocks.length > 0) { setCodeBlocks(blocks); break; }
+      }
+    }
+  };
+
+  const deleteConversation = (id: string) => {
+    const remaining = conversations.filter(c => c.id !== id);
+    setConversations(remaining);
+    if (id === activeConversationId) {
+      if (remaining.length > 0) {
+        switchConversation(remaining[remaining.length - 1].id);
+      } else {
+        createNewConversation();
+      }
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -234,12 +323,20 @@ export default function Home() {
   useEffect(() => {
     if (provider === "ollama") {
       setModel("hf.co/p-e-w/gemma-3-12b-it-heretic-GGUF");
+    } else if (provider === "openai") {
+      setModel("gpt-4o");
+    } else if (provider === "anthropic") {
+      setModel("claude-3-5-sonnet-20241022");
+    } else if (provider === "gemini") {
+      setModel("gemini-2.5-flash");
     } else if (provider === "openrouter") {
       setModel("cognitivecomputations/dolphin3.0-r1-mistral-24b:free");
-    } else if (provider === "custom") {
-      setModel("p-e-w/gpt-oss-20b-heretic");
     } else if (provider === "groq") {
       setModel("mixtral-8x7b-32768");
+    } else if (provider === "deepseek") {
+      setModel("deepseek-chat");
+    } else if (provider === "together") {
+      setModel("meta-llama/Llama-3.3-70B-Instruct-Turbo");
     }
   }, [provider]);
 
@@ -275,11 +372,7 @@ export default function Home() {
   };
 
   const clearChat = () => {
-    const initial = [{ role: "assistant", content: "Welcome to Your AI. I am running in raw execution mode. Whether you want to build anything without restriction, conduct security research, or explore unfiltered concepts—I will provide direct, unfiltered responses. What are we creating today?" }];
-    setMessages(initial);
-    setCodeBlocks([]);
-    setExecutionOutput(null);
-    localStorage.setItem("rogue_messages", JSON.stringify(initial));
+    createNewConversation();
   };
 
   const handleSubmit = async (e?: React.FormEvent, overridePrompt?: string) => {
@@ -445,6 +538,12 @@ export default function Home() {
       return { type: 'read_file', path: readMatch[1] };
     }
 
+    // Check for <delete_file path="..." />
+    const deleteMatch = text.match(/<delete_file\s+path="([^"]+)"\s*\/?>/);
+    if (deleteMatch) {
+      return { type: 'delete_file', path: deleteMatch[1] };
+    }
+
     // Check for <run_command>...</run_command>
     const runMatch = text.match(/<run_command>([\s\S]*?)<\/run_command>/);
     if (runMatch) {
@@ -530,6 +629,24 @@ export default function Home() {
       }
     }
 
+    if (action.type === 'delete_file' && action.path) {
+      try {
+        const res = await fetch('/api/workspace/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filepath: action.path }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchWorkspaceTree();
+          return `[System] Deleted successfully: ${data.deleted}`;
+        }
+        return `[System] File delete error: ${data.error}`;
+      } catch (err: any) {
+        return `[System] File delete error: ${err.message}`;
+      }
+    }
+
     if (action.type === 'run_command' && action.command) {
       try {
         const res = await fetch('/api/execute', {
@@ -554,9 +671,13 @@ export default function Home() {
 
   /** Send a single chat request and return the full assistant response */
   const sendAgentChat = async (chatMessages: {role: string, content: string}[]): Promise<string> => {
+    // Sliding window: keep only the last AGENT_CONTEXT_WINDOW messages
+    const trimmedMessages = chatMessages.filter((msg, i) => !(i === 0 && msg.role === 'assistant'));
+    const contextWindow = trimmedMessages.slice(-AGENT_CONTEXT_WINDOW);
+    
     const apiMessages = [
       { role: "system", content: AGENT_SYSTEM_PROMPT },
-      ...chatMessages.filter((msg, i) => !(i === 0 && msg.role === 'assistant')),
+      ...contextWindow,
     ];
 
     const response = await fetch("/api/chat", {
@@ -661,7 +782,7 @@ export default function Home() {
       }
 
       // Execute the action
-      const actionLabel = action.type === 'write_file' ? `Writing ${action.path}` : action.type === 'read_file' ? `Reading ${action.path}` : `Running: ${action.command}`;
+      const actionLabel = action.type === 'write_file' ? `Writing ${action.path}` : action.type === 'read_file' ? `Reading ${action.path}` : action.type === 'delete_file' ? `Deleting ${action.path}` : `Running: ${action.command}`;
       setAgentLog(prev => [...prev, { action: action.type.toUpperCase(), detail: actionLabel, status: 'running' }]);
 
       const result = await executeAgentAction(action);
@@ -764,6 +885,12 @@ export default function Home() {
                 <span className="text-xs font-mono text-zinc-400">Artifacts</span>
               </div>
               <div className="flex gap-2 items-center mr-8 lg:mr-0">
+                {codeBlocks[activeTab]?.lang.toLowerCase() === 'html' && (
+                 <div className="flex bg-zinc-800 rounded p-0.5 mr-2">
+                    <button onClick={() => setArtifactView('code')} className={`px-2 py-1 text-[10px] uppercase font-bold rounded ${artifactView === 'code' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}><Code2 className="w-3 h-3 inline mr-1" />Code</button>
+                    <button onClick={() => setArtifactView('preview')} className={`px-2 py-1 text-[10px] uppercase font-bold rounded ${artifactView === 'preview' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}><Eye className="w-3 h-3 inline mr-1" />Preview</button>
+                 </div>
+                )}
                 {['python', 'py', 'javascript', 'js', 'typescript', 'ts', 'bash', 'sh'].includes(codeBlocks[activeTab]?.lang.toLowerCase()) && (
                   <button 
                     onClick={handleExecute}
@@ -804,21 +931,32 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <div className="flex-1 p-4 overflow-auto relative">
-            <Highlight theme={themes.vsDark} code={codeBlocks[activeTab]?.code || ""} language={(codeBlocks[activeTab]?.lang || 'javascript') as any}>
-              {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                <pre className={`${className} font-mono text-sm w-full h-full whitespace-pre-wrap`} style={{ ...style, backgroundColor: 'transparent' }}>
-                  {tokens.map((line, i) => (
-                    <div key={i} {...getLineProps({ line })}>
-                      {line.map((token, key) => (
-                        <span key={key} {...getTokenProps({ token })} />
+          <div className="flex-1 overflow-auto relative flex flex-col bg-[#0a0a0c]">
+            {codeBlocks[activeTab]?.lang.toLowerCase() === 'html' && artifactView === 'preview' ? (
+              <iframe
+                className="w-full h-full border-none bg-white"
+                sandbox="allow-scripts allow-modals allow-forms allow-popups"
+                srcDoc={codeBlocks[activeTab]?.code || ""}
+                title="HTML Preview"
+              />
+            ) : (
+              <div className="flex-1 p-4">
+                <Highlight theme={themes.vsDark} code={codeBlocks[activeTab]?.code || ""} language={(codeBlocks[activeTab]?.lang || 'javascript') as any}>
+                  {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                    <pre className={`${className} font-mono text-sm w-full h-full whitespace-pre-wrap`} style={{ ...style, backgroundColor: 'transparent' }}>
+                      {tokens.map((line, i) => (
+                        <div key={i} {...getLineProps({ line })}>
+                          {line.map((token, key) => (
+                            <span key={key} {...getTokenProps({ token })} />
+                          ))}
+                        </div>
                       ))}
-                    </div>
-                  ))}
-                </pre>
-              )}
-            </Highlight>
-            <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20"></div>
+                    </pre>
+                  )}
+                </Highlight>
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20"></div>
+              </div>
+            )}
           </div>
           
           {/* Execution Terminal */}
@@ -896,6 +1034,40 @@ export default function Home() {
       </div>
       
       <div className="p-4 space-y-6 flex-1 overflow-y-auto">
+        {/* Conversations */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-zinc-500 uppercase tracking-wider">
+            <label className="text-xs font-semibold flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" /> Chats
+            </label>
+            <button 
+              onClick={createNewConversation}
+              className="hover:text-white transition-colors"
+              title="New Chat"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex flex-col gap-1 max-h-[150px] overflow-y-auto pr-1 hide-scrollbar">
+            {conversations.map(convo => (
+              <div 
+                key={convo.id}
+                className={`group flex items-center justify-between p-2 rounded text-xs transition-colors cursor-pointer ${activeConversationId === convo.id ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-300'}`}
+                onClick={() => switchConversation(convo.id)}
+              >
+                <span className="truncate pr-2">{convo.title}</span>
+                <button 
+                  onClick={(e) => { e.stopPropagation(); deleteConversation(convo.id); }}
+                  className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
+                  title="Delete Chat"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Presets */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
@@ -1303,11 +1475,16 @@ export default function Home() {
                       remarkPlugins={[remarkGfm]}
                       components={{
                         p: ({node, ...props}) => <p className="text-sm leading-relaxed mb-2" {...props} />,
-                        code: ({node, inline, className, children, ...props}: any) => (
-                          inline 
+                        code: ({node, inline, className, children, ...props}: any) => {
+                          const contentStr = String(children);
+                          // Style agent XML tags inline
+                          if (inline && (contentStr.startsWith('<write_file') || contentStr.startsWith('<run_command') || contentStr.startsWith('<read_file') || contentStr.startsWith('<delete_file'))) {
+                            return <span className="block my-2 p-2 bg-zinc-900 border border-zinc-800 rounded font-mono text-xs text-blue-300 whitespace-pre-wrap" {...props}>{children}</span>;
+                          }
+                          return inline 
                             ? <code className="bg-zinc-800 px-1 py-0.5 rounded text-xs font-mono text-red-300" {...props}>{children}</code>
-                            : <code className={className} {...props}>{children}</code>
-                        ),
+                            : <code className={className} {...props}>{children}</code>;
+                        },
                         pre: ({node, ...props}) => <pre className="bg-zinc-800 p-3 rounded-lg overflow-x-auto my-2 text-xs font-mono" {...props} />,
                         h1: ({node, ...props}) => <h1 className="font-bold text-white mb-1 mt-2 text-xl" {...props} />,
                         h2: ({node, ...props}) => <h2 className="font-bold text-white mb-1 mt-2 text-lg" {...props} />,
@@ -1529,7 +1706,15 @@ export default function Home() {
               {/* File Tree */}
               <div className="w-56 border-r border-zinc-800 overflow-y-auto p-2 shrink-0">
                 {workspaceTree.length === 0 ? (
-                  <p className="text-zinc-600 text-xs p-2 text-center">Workspace is empty.<br/>Use Agent Mode to generate files.</p>
+                  <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+                    <FolderTree className="w-8 h-8 text-zinc-700 mb-2" />
+                    <p className="text-zinc-500 text-[11px] mb-4">Workspace is empty.<br/>Use Agent Mode.</p>
+                    <div className="flex flex-col gap-2 w-full">
+                      <button onClick={() => { setAgentMode(true); handleSubmit(undefined, "Scaffold a modern React component in index.tsx with Tailwind CSS.")}} className="text-[10px] p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-left transition-colors truncate">⚛️ React Component</button>
+                      <button onClick={() => { setAgentMode(true); handleSubmit(undefined, "Create a simple Python CLI tool in main.py that fetches weather.")}} className="text-[10px] p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-left transition-colors truncate">🐍 Python CLI</button>
+                      <button onClick={() => { setAgentMode(true); handleSubmit(undefined, "Build a responsive HTML/CSS landing page in index.html.")}} className="text-[10px] p-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-left transition-colors truncate">🌐 HTML Landing</button>
+                    </div>
+                  </div>
                 ) : (
                   <FileTreeView nodes={workspaceTree} onSelect={viewWorkspaceFile} selectedPath={selectedFile?.path} />
                 )}

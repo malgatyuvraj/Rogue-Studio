@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YourAI | The Unrestricted AI Builder",
-  description: "An open-source AI development platform. Build anything with local or cloud models. Powered by concept abliteration research.",
+  title: "Rogue Studio | The Unrestricted AI Builder",
+  description: "An open-source AI development platform with autonomous agent mode. Build anything with local or cloud models. No filters, no limits.",
 };
 
 export default function RootLayout({
