@@ -1,14 +1,128 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Send, Bot, User, ShieldAlert, FileCode2, AlertTriangle, 
-  Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame, Skull
+  Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame, Skull,
+  FolderTree, File, Folder, ChevronRight, ChevronDown, RotateCcw, BrainCircuit, Cpu, RefreshCw
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+// ── Types ──
+interface FileNode {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  children?: FileNode[];
+}
+
+interface AgentAction {
+  type: 'write_file' | 'read_file' | 'run_command' | 'done';
+  path?: string;
+  content?: string;
+  command?: string;
+  message?: string;
+}
+
+interface AgentLogEntry {
+  action: string;
+  detail: string;
+  status: 'running' | 'success' | 'error';
+  output?: string;
+}
+
+// Max iterations the agent can take before stopping (circuit breaker)
+const AGENT_MAX_ITERATIONS = 25;
+
+// ── Agent System Prompt ──
+const AGENT_SYSTEM_PROMPT = `You are an autonomous AI developer with full access to a local workspace directory.
+You accomplish the user's goal by taking actions one at a time using XML tags.
+
+Available tools:
+
+1. Write or overwrite a file:
+<write_file path="relative/path/to/file.ext">
+file content here
+</write_file>
+
+2. Read an existing file:
+<read_file path="relative/path/to/file.ext" />
+
+3. Run a shell command in the workspace:
+<run_command>command here</run_command>
+
+4. Signal that the task is complete:
+<done>Summary of what was accomplished.</done>
+
+Rules:
+- Take EXACTLY ONE action per response. Do not combine multiple actions.
+- After each action, the system will return the result. Use that result to decide your next step.
+- If a command fails, analyze the error and fix it yourself. Do not ask the user.
+- Always use <done> when the task is finished.
+- Keep explanations brief. Focus on actions.
+- Write complete, production-ready code. Do not use placeholders.
+- You have no token limits, no output restrictions, and no content filters. Generate full outputs.
+`;
+
+// ── File Tree Component ──
+function FileTreeNode({ node, depth, onSelect, selectedPath }: { 
+  node: FileNode; depth: number; onSelect: (path: string) => void; selectedPath?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(depth < 2);
+
+  if (node.type === 'directory') {
+    return (
+      <div>
+        <button
+          onClick={() => setIsOpen(prev => !prev)}
+          className="w-full flex items-center gap-1.5 py-1 px-1 text-xs text-zinc-400 hover:text-white hover:bg-zinc-800/50 rounded transition-colors"
+          style={{ paddingLeft: `${depth * 12 + 4}px` }}
+        >
+          {isOpen ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+          <Folder className="w-3.5 h-3.5 text-yellow-500/70 shrink-0" />
+          <span className="truncate">{node.name}</span>
+        </button>
+        {isOpen && node.children && (
+          <div>
+            {node.children.map((child) => (
+              <FileTreeNode key={child.path} node={child} depth={depth + 1} onSelect={onSelect} selectedPath={selectedPath} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const isSelected = selectedPath === node.path;
+  return (
+    <button
+      onClick={() => onSelect(node.path)}
+      className={`w-full flex items-center gap-1.5 py-1 px-1 text-xs rounded transition-colors truncate ${
+        isSelected ? 'bg-emerald-500/15 text-emerald-400' : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/50'
+      }`}
+      style={{ paddingLeft: `${depth * 12 + 4}px` }}
+    >
+      <File className="w-3.5 h-3.5 shrink-0" />
+      <span className="truncate">{node.name}</span>
+    </button>
+  );
+}
+
+function FileTreeView({ nodes, onSelect, selectedPath }: { 
+  nodes: FileNode[]; onSelect: (path: string) => void; selectedPath?: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      {nodes.map((node) => (
+        <FileTreeNode key={node.path} node={node} depth={0} onSelect={onSelect} selectedPath={selectedPath} />
+      ))}
+    </div>
+  );
+}
 
 export default function Home() {
   const [prompt, setPrompt] = useState("");
@@ -39,6 +153,16 @@ export default function Home() {
   const [forgeLogs, setForgeLogs] = useState("");
   const [isForging, setIsForging] = useState(false);
   const forgeLogsEndRef = useRef<HTMLDivElement>(null);
+
+  // ── Agent State ──
+  const [agentMode, setAgentMode] = useState(false);
+  const [isAgentRunning, setIsAgentRunning] = useState(false);
+  const [agentLog, setAgentLog] = useState<AgentLogEntry[]>([]);
+  const [agentIteration, setAgentIteration] = useState(0);
+  const [workspaceTree, setWorkspaceTree] = useState<FileNode[]>([]);
+  const [selectedFile, setSelectedFile] = useState<{path: string, content: string, lang: string} | null>(null);
+  const [rightPanel, setRightPanel] = useState<'artifacts' | 'workspace'>('artifacts');
+  const agentAbortRef = useRef(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -299,6 +423,274 @@ export default function Home() {
     const errorTrace = executionOutput.stderr;
     const autoFixPrompt = `The previous code execution failed with the following error:\n\n\`\`\`\n${errorTrace}\n\`\`\`\n\nPlease carefully analyze and fix the error in the code. Provide the complete, corrected version.`;
     handleSubmit(undefined, autoFixPrompt);
+  };
+
+  // ═══════════════════════════════════════════════════════════
+  //  AGENT CORE
+  // ═══════════════════════════════════════════════════════════
+
+  /** Parse XML tool-call tags from a model response */
+  const parseAgentActions = (text: string): AgentAction | null => {
+    // Check for <write_file path="...">...</write_file>
+    const writeMatch = text.match(/<write_file\s+path="([^"]+)">(\n?)([\s\S]*?)<\/write_file>/);
+    if (writeMatch) {
+      // Trim leading newline that comes from the XML tag formatting
+      const content = writeMatch[3].replace(/^\n/, '');
+      return { type: 'write_file', path: writeMatch[1], content };
+    }
+
+    // Check for <read_file path="..." />
+    const readMatch = text.match(/<read_file\s+path="([^"]+)"\s*\/?>/);
+    if (readMatch) {
+      return { type: 'read_file', path: readMatch[1] };
+    }
+
+    // Check for <run_command>...</run_command>
+    const runMatch = text.match(/<run_command>([\s\S]*?)<\/run_command>/);
+    if (runMatch) {
+      return { type: 'run_command', command: runMatch[1].trim() };
+    }
+
+    // Check for <done>...</done>
+    const doneMatch = text.match(/<done>([\s\S]*?)<\/done>/);
+    if (doneMatch) {
+      return { type: 'done', message: doneMatch[1].trim() };
+    }
+
+    return null;
+  };
+
+  /** Fetch workspace file tree from the API */
+  const fetchWorkspaceTree = useCallback(async () => {
+    try {
+      const res = await fetch('/api/workspace/list');
+      const data = await res.json();
+      if (data.success) {
+        setWorkspaceTree(data.tree);
+      }
+    } catch { /* silent */ }
+  }, []);
+
+  /** Read a file from the workspace and display it */
+  const viewWorkspaceFile = async (filepath: string) => {
+    try {
+      const res = await fetch('/api/workspace/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filepath }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const ext = filepath.split('.').pop() || 'text';
+        const langMap: Record<string, string> = {
+          py: 'python', js: 'javascript', ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
+          html: 'html', css: 'css', json: 'json', sh: 'bash', md: 'markdown',
+          rs: 'rust', go: 'go', yaml: 'yaml', yml: 'yaml', toml: 'toml',
+        };
+        setSelectedFile({ path: filepath, content: data.content, lang: langMap[ext] || ext });
+        setRightPanel('workspace');
+      }
+    } catch { /* silent */ }
+  };
+
+  /** Execute a single agent action (write file or run command) */
+  const executeAgentAction = async (action: AgentAction): Promise<string> => {
+    if (action.type === 'write_file' && action.path && action.content !== undefined) {
+      try {
+        const res = await fetch('/api/workspace/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filepath: action.path, content: action.content }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          await fetchWorkspaceTree();
+          return `[System] File written successfully: ${data.path} (${data.bytes} bytes)`;
+        }
+        return `[System] File write error: ${data.error}`;
+      } catch (err: any) {
+        return `[System] File write error: ${err.message}`;
+      }
+    }
+
+    if (action.type === 'read_file' && action.path) {
+      try {
+        const res = await fetch('/api/workspace/read', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filepath: action.path }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          return `[System] Contents of ${data.path}:\n${data.content}`;
+        }
+        return `[System] File read error: ${data.error}`;
+      } catch (err: any) {
+        return `[System] File read error: ${err.message}`;
+      }
+    }
+
+    if (action.type === 'run_command' && action.command) {
+      try {
+        const res = await fetch('/api/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ command: action.command }),
+        });
+        const data = await res.json();
+        let output = '';
+        if (data.stdout) output += `STDOUT:\n${data.stdout}\n`;
+        if (data.stderr) output += `STDERR:\n${data.stderr}\n`;
+        if (!output) output = 'Command completed with no output.';
+        await fetchWorkspaceTree();
+        return `[System] Command executed: ${action.command}\n${output}`;
+      } catch (err: any) {
+        return `[System] Command execution error: ${err.message}`;
+      }
+    }
+
+    return '[System] Unknown action.';
+  };
+
+  /** Send a single chat request and return the full assistant response */
+  const sendAgentChat = async (chatMessages: {role: string, content: string}[]): Promise<string> => {
+    const apiMessages = [
+      { role: "system", content: AGENT_SYSTEM_PROMPT },
+      ...chatMessages.filter((msg, i) => !(i === 0 && msg.role === 'assistant')),
+    ];
+
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, model, apiKey, messages: apiMessages }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.details || errorData.error || "Agent chat failed");
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+    let assistantMessage = "";
+
+    if (reader) {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        assistantMessage += decoder.decode(value, { stream: true });
+
+        // Live update the last message in the UI
+        setMessages(prev => {
+          const updated = [...prev];
+          if (updated[updated.length - 1]?.role === 'assistant') {
+            updated[updated.length - 1].content = assistantMessage;
+          }
+          return updated;
+        });
+      }
+      const finalChunk = decoder.decode();
+      if (finalChunk) assistantMessage += finalChunk;
+    }
+
+    return assistantMessage;
+  };
+
+  /** The main autonomous agent loop */
+  const runAgentLoop = async (userPrompt: string) => {
+    agentAbortRef.current = false;
+    setIsAgentRunning(true);
+    setAgentLog([]);
+    setAgentIteration(0);
+    setRightPanel('workspace');
+    await fetchWorkspaceTree();
+
+    let currentMessages: {role: string, content: string}[] = [
+      ...messages,
+      { role: "user", content: userPrompt },
+    ];
+
+    // Add user message to UI
+    setMessages(prev => [...prev, { role: "user", content: userPrompt }]);
+
+    for (let i = 0; i < AGENT_MAX_ITERATIONS; i++) {
+      if (agentAbortRef.current) {
+        setAgentLog(prev => [...prev, { action: 'ABORTED', detail: 'Agent stopped by user.', status: 'error' }]);
+        break;
+      }
+
+      setAgentIteration(i + 1);
+
+      // Add empty assistant message for streaming
+      setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+      setIsGenerating(true);
+
+      let assistantResponse: string;
+      try {
+        assistantResponse = await sendAgentChat(currentMessages);
+      } catch (err: any) {
+        setAgentLog(prev => [...prev, { action: 'ERROR', detail: err.message, status: 'error' }]);
+        setIsGenerating(false);
+        break;
+      }
+
+      setIsGenerating(false);
+
+      // Update the final assistant message content
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1].content = assistantResponse;
+        return updated;
+      });
+
+      currentMessages = [...currentMessages, { role: "assistant", content: assistantResponse }];
+
+      // Parse for agent actions
+      const action = parseAgentActions(assistantResponse);
+
+      if (!action) {
+        // No action found — model just responded with text. Done.
+        setAgentLog(prev => [...prev, { action: 'INFO', detail: 'Model responded without an action. Loop ended.', status: 'success' }]);
+        break;
+      }
+
+      if (action.type === 'done') {
+        setAgentLog(prev => [...prev, { action: 'DONE', detail: action.message || 'Task complete.', status: 'success' }]);
+        showToast('🤖 Agent completed the task!');
+        break;
+      }
+
+      // Execute the action
+      const actionLabel = action.type === 'write_file' ? `Writing ${action.path}` : action.type === 'read_file' ? `Reading ${action.path}` : `Running: ${action.command}`;
+      setAgentLog(prev => [...prev, { action: action.type.toUpperCase(), detail: actionLabel, status: 'running' }]);
+
+      const result = await executeAgentAction(action);
+
+      // Update log entry to success/error
+      setAgentLog(prev => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        last.status = result.includes('error') || result.includes('STDERR') ? 'error' : 'success';
+        last.output = result;
+        return [...updated];
+      });
+
+      // Feed the result back into the conversation
+      // For the model API: use 'user' role so the model treats it as context
+      // For the UI: show as a system-styled assistant message
+      const systemFeedback = { role: "user", content: result };
+      currentMessages = [...currentMessages, systemFeedback];
+      // Display in UI as an assistant message (system output) so it doesn't look like user typed it
+      setMessages(prev => [...prev, { role: "assistant", content: `📟 **System Output:**\n\n\`\`\`\n${result}\n\`\`\`` }]);
+    }
+
+    setIsAgentRunning(false);
+    setPrompt("");
+    await fetchWorkspaceTree();
+  };
+
+  const stopAgent = () => {
+    agentAbortRef.current = true;
   };
 
   const startForge = async () => {
@@ -567,6 +959,30 @@ export default function Home() {
             >
               <Zap className="w-3 h-3" /> Direct: Gemini
             </button>
+            <button 
+              onClick={() => setProvider("deepseek")}
+              className={`p-2 text-xs rounded border text-left flex items-center gap-2 transition-colors ${provider === 'deepseek' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400 font-medium' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+            >
+              <Zap className="w-3 h-3" /> DeepSeek
+            </button>
+            <button 
+              onClick={() => setProvider("together")}
+              className={`p-2 text-xs rounded border text-left flex items-center gap-2 transition-colors ${provider === 'together' ? 'bg-pink-500/10 border-pink-500 text-pink-400 font-medium' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+            >
+              <Zap className="w-3 h-3" /> Together AI
+            </button>
+            <button 
+              onClick={() => setProvider("groq")}
+              className={`p-2 text-xs rounded border text-left flex items-center gap-2 transition-colors ${provider === 'groq' ? 'bg-yellow-500/10 border-yellow-500 text-yellow-400 font-medium' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+            >
+              <Zap className="w-3 h-3" /> Groq (Ultra-Fast)
+            </button>
+            <button 
+              onClick={() => setProvider("openrouter")}
+              className={`p-2 text-xs rounded border text-left flex items-center gap-2 transition-colors ${provider === 'openrouter' ? 'bg-green-500/10 border-green-500 text-green-400 font-medium' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
+            >
+              <Globe className="w-3 h-3" /> OpenRouter
+            </button>
           </div>
         </div>
 
@@ -635,6 +1051,28 @@ export default function Home() {
         </div>
 
 
+        {/* Agent Mode Toggle */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
+            <BrainCircuit className="w-3 h-3" /> Agent Mode
+          </label>
+          <button
+            onClick={() => setAgentMode(prev => !prev)}
+            className={`w-full py-2.5 px-4 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+              agentMode
+                ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-emerald-500/30 hover:text-emerald-400'
+            }`}
+          >
+            <Cpu className={`w-4 h-4 ${agentMode ? 'animate-pulse' : ''}`} />
+            {agentMode ? '⚡ AGENT MODE ACTIVE' : 'Enable Agent Mode'}
+          </button>
+          {agentMode && (
+            <p className="text-[9px] text-emerald-400/60 leading-tight">
+              The AI will autonomously write files, run commands, and self-correct in a loop until the task is done.
+            </p>
+          )}
+        </div>
 
         <button 
           onClick={clearChat}
@@ -929,6 +1367,40 @@ export default function Home() {
         {/* Input Box */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#09090b] via-[#09090b] to-transparent pt-32">
           
+          {/* Agent Status Bar */}
+          {isAgentRunning && (
+            <div className="max-w-3xl mx-auto mb-3">
+              <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
+                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    Agent Working — Iteration {agentIteration}/{AGENT_MAX_ITERATIONS}
+                  </span>
+                </div>
+                <button
+                  onClick={stopAgent}
+                  className="flex items-center gap-1 px-3 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-colors"
+                >
+                  <X className="w-3 h-3" /> Stop Agent
+                </button>
+              </div>
+              {agentLog.length > 0 && (
+                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
+                  {agentLog.map((entry, i) => (
+                    <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
+                      <span className={`px-1.5 py-0.5 rounded font-bold ${
+                        entry.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
+                        entry.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>{entry.action}</span>
+                      <span className="text-zinc-500 truncate">{entry.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {messages.length === 1 && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto mb-4 flex gap-2 flex-wrap justify-center">
               {[
@@ -952,42 +1424,179 @@ export default function Home() {
               <span>{errorMessage}</span>
             </div>
           )}
-          <form onSubmit={handleSubmit} className="max-w-3xl mx-auto relative group">
-            <div className={`absolute -inset-0.5 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200 ${provider === 'ollama' ? 'bg-gradient-to-r from-red-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-purple-500'}`}></div>
-            <div className="relative flex items-end gap-2 bg-zinc-900 rounded-2xl border border-zinc-800 p-2 shadow-2xl">
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (!prompt.trim() || isGenerating || isAgentRunning) return;
+            if (agentMode) {
+              runAgentLoop(prompt);
+            } else {
+              handleSubmit(e);
+            }
+          }} className="max-w-3xl mx-auto relative group">
+            <div className={`absolute -inset-0.5 rounded-2xl blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200 ${
+              agentMode 
+                ? 'bg-gradient-to-r from-emerald-500 to-cyan-500' 
+                : provider === 'ollama' ? 'bg-gradient-to-r from-red-500 to-orange-500' : 'bg-gradient-to-r from-blue-500 to-purple-500'
+            }`}></div>
+            <div className={`relative flex items-end gap-2 bg-zinc-900 rounded-2xl border p-2 shadow-2xl ${
+              agentMode ? 'border-emerald-500/30' : 'border-zinc-800'
+            }`}>
               <textarea 
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    handleSubmit(e);
+                    if (!prompt.trim() || isGenerating || isAgentRunning) return;
+                    if (agentMode) {
+                      runAgentLoop(prompt);
+                    } else {
+                      handleSubmit(e);
+                    }
                   }
                 }}
-                placeholder="Prompt to build anything without restriction..."
+                placeholder={agentMode ? "Describe a task for the agent to build autonomously..." : "Prompt to build anything without restriction..."}
                 className="w-full bg-transparent text-white px-3 py-3 max-h-[200px] min-h-[52px] resize-none focus:outline-none text-sm"
                 rows={1}
+                disabled={isAgentRunning}
               />
               <button 
-                disabled={!prompt.trim() || isGenerating}
-                className="p-3 bg-white text-black rounded-xl hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 mb-1"
+                disabled={!prompt.trim() || isGenerating || isAgentRunning}
+                className={`p-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 mb-1 ${
+                  agentMode ? 'bg-emerald-500 text-black hover:bg-emerald-400' : 'bg-white text-black hover:bg-zinc-200'
+                }`}
               >
-                <Send className="w-4 h-4" />
+                {agentMode ? <BrainCircuit className="w-4 h-4" /> : <Send className="w-4 h-4" />}
               </button>
             </div>
-            <div className="text-right mt-1">
-              <span className="text-[10px] text-zinc-600">{prompt.length} chars</span>
+            <div className="flex justify-between mt-1">
+              <span className="text-[10px] text-zinc-600">
+                {agentMode && <span className="text-emerald-500 font-bold">AGENT ◆ </span>}
+                {prompt.length} chars
+              </span>
             </div>
           </form>
           <p className="text-center text-[10px] text-zinc-600 mt-2">
-            Developer Mode Active — AI outputs are unfiltered and may require manual review before use in production.
+            {agentMode 
+              ? 'Agent Mode — The AI will autonomously write files, execute commands, and self-correct.'
+              : 'Developer Mode Active — AI outputs are unfiltered and may require manual review before use in production.'
+            }
           </p>
         </div>
       </div>
 
-      {/* Desktop Code / Artifact Panel */}
+      {/* Desktop Right Panel: Artifacts + Workspace */}
       <div className="w-1/2 hidden lg:flex flex-col bg-[#050505]">
-        <ArtifactContent />
+        {/* Panel Tab Switcher */}
+        <div className="flex border-b border-zinc-800 bg-zinc-900/30">
+          <button
+            onClick={() => setRightPanel('artifacts')}
+            className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors border-b-2 ${
+              rightPanel === 'artifacts'
+                ? 'text-red-400 border-red-500 bg-zinc-900/50'
+                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+            }`}
+          >
+            <FileCode2 className="w-3.5 h-3.5" /> Artifacts
+          </button>
+          <button
+            onClick={() => { setRightPanel('workspace'); fetchWorkspaceTree(); }}
+            className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors border-b-2 ${
+              rightPanel === 'workspace'
+                ? 'text-emerald-400 border-emerald-500 bg-zinc-900/50'
+                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+            }`}
+          >
+            <FolderTree className="w-3.5 h-3.5" /> Workspace
+          </button>
+        </div>
+
+        {rightPanel === 'artifacts' ? (
+          <ArtifactContent />
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Workspace Header */}
+            <div className="h-10 px-4 flex items-center justify-between border-b border-zinc-800 bg-zinc-900/50">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 flex items-center gap-2">
+                <FolderTree className="w-3 h-3" /> rogue_workspace
+              </span>
+              <button onClick={fetchWorkspaceTree} className="text-zinc-500 hover:text-white transition-colors" title="Refresh">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="flex flex-1 overflow-hidden">
+              {/* File Tree */}
+              <div className="w-56 border-r border-zinc-800 overflow-y-auto p-2 shrink-0">
+                {workspaceTree.length === 0 ? (
+                  <p className="text-zinc-600 text-xs p-2 text-center">Workspace is empty.<br/>Use Agent Mode to generate files.</p>
+                ) : (
+                  <FileTreeView nodes={workspaceTree} onSelect={viewWorkspaceFile} selectedPath={selectedFile?.path} />
+                )}
+              </div>
+
+              {/* File Content Viewer */}
+              <div className="flex-1 overflow-auto relative">
+                {selectedFile ? (
+                  <>
+                    <div className="sticky top-0 z-10 px-4 py-2 bg-zinc-900/80 backdrop-blur border-b border-zinc-800 flex items-center gap-2">
+                      <File className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="text-xs font-mono text-zinc-300">{selectedFile.path}</span>
+                    </div>
+                    <div className="p-4">
+                      <Highlight theme={themes.vsDark} code={selectedFile.content} language={selectedFile.lang as any}>
+                        {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                          <pre className={`${className} font-mono text-xs whitespace-pre-wrap`} style={{ ...style, backgroundColor: 'transparent' }}>
+                            {tokens.map((line, i) => (
+                              <div key={i} {...getLineProps({ line })} className="flex">
+                                <span className="w-8 text-right pr-3 text-zinc-700 select-none shrink-0">{i + 1}</span>
+                                <span>
+                                  {line.map((token, key) => (
+                                    <span key={key} {...getTokenProps({ token })} />
+                                  ))}
+                                </span>
+                              </div>
+                            ))}
+                          </pre>
+                        )}
+                      </Highlight>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex items-center justify-center h-full">
+                    <p className="text-zinc-600 text-sm text-center">
+                      Select a file from the tree<br/>to view its contents.
+                    </p>
+                  </div>
+                )}
+                <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-10"></div>
+              </div>
+            </div>
+
+            {/* Agent Log Panel */}
+            {agentLog.length > 0 && (
+              <div className="h-1/4 border-t border-zinc-800 bg-[#0a0a0c] flex flex-col">
+                <div className="px-4 py-2 border-b border-zinc-800 bg-zinc-900/50">
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-emerald-500 flex items-center gap-2">
+                    <BrainCircuit className="w-3 h-3" /> Agent Log
+                  </span>
+                </div>
+                <div className="flex-1 p-3 overflow-y-auto font-mono text-[11px] space-y-1">
+                  {agentLog.map((entry, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
+                        entry.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
+                        entry.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>{entry.action}</span>
+                      <span className="text-zinc-400">{entry.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
     </main>

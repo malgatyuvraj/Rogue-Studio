@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# agent workspace (runtime-generated files)
+/rogue_workspace
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

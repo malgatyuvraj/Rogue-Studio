@@ -52,7 +52,7 @@ export async function POST(req: Request) {
         model: model || "gpt-4o",
         messages: processedMessages,
         stream: true,
-        max_tokens: 16384,
+        max_tokens: 128000,
       };
     } else if (provider === "anthropic") {
       if (!apiKey) throw new Error("API Key is required for Anthropic");
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
         system: systemMessage,
         messages: nonSystemMessages,
         stream: true,
-        max_tokens: 8192
+        max_tokens: 65536
       };
     } else if (provider === "gemini") {
       if (!apiKey) throw new Error("API Key is required for Gemini");
@@ -94,6 +94,7 @@ export async function POST(req: Request) {
         model: model || "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
         messages: messages, // OpenRouter models like Dolphin don't need additional wrapping
         stream: true,
+        max_tokens: 131072,
       };
     } else if (provider === "groq") {
       if (!apiKey) throw new Error("API Key is required for Groq");
@@ -103,7 +104,27 @@ export async function POST(req: Request) {
         model: model || "mixtral-8x7b-32768",
         messages: processedMessages,
         stream: true,
-        max_tokens: 32768,
+        max_tokens: 131072,
+      };
+    } else if (provider === "deepseek") {
+      if (!apiKey) throw new Error("API Key is required for DeepSeek");
+      apiUrl = "https://api.deepseek.com/chat/completions";
+      headers["Authorization"] = `Bearer ${apiKey}`;
+      payload = {
+        model: model || "deepseek-chat",
+        messages: processedMessages,
+        stream: true,
+        max_tokens: 65536,
+      };
+    } else if (provider === "together") {
+      if (!apiKey) throw new Error("API Key is required for Together AI");
+      apiUrl = "https://api.together.xyz/v1/chat/completions";
+      headers["Authorization"] = `Bearer ${apiKey}`;
+      payload = {
+        model: model || "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        messages: processedMessages,
+        stream: true,
+        max_tokens: 131072,
       };
     } else {
       throw new Error("Invalid provider selected");
