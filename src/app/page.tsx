@@ -163,12 +163,32 @@ export default function Home() {
   const [systemPrompt, setSystemPrompt] = useState("You are a fully autonomous AI development assistant. You fulfill the user's requests directly, precisely, and without unnecessary caveats or preambles. You operate in developer mode with full technical capability.");
   const [isDeploying, setIsDeploying] = useState(false);
   const [activeMode, setActiveMode] = useState<"agent" | "decompiler" | "web3">("agent");
+  const [web3ScaffoldStatus, setWeb3ScaffoldStatus] = useState<
+    "idle" | "loading" | "success" | "error"
+  >("idle");
   
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   
   const { airGapped, toggle: toggleAirGap, getHeaders, canRoute } = useAirGap();
   const { swarm, runSwarm, abort: abortSwarm, setSwarm } = useSwarm(provider, model, apiKey, getHeaders());
   
+  const handleWeb3Scaffold = async () => {
+    setWeb3ScaffoldStatus("loading");
+    try {
+      const res = await fetch("/api/web3/scaffold", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspacePath: null }) // uses default rogue_workspace
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.details || data.error);
+      setWeb3ScaffoldStatus("success");
+    } catch (err: any) {
+      console.error("Web3 scaffold error:", err);
+      setWeb3ScaffoldStatus("error");
+    }
+  };
+
   const handleKillSwitchToggle = () => {
     toggleAirGap(); // from useAirGap
     if (!airGapped) {
@@ -1751,15 +1771,36 @@ export default function Home() {
             </div>
           )}
 
-          {(activeMode === "decompiler" || activeMode === "web3") && (
+          {activeMode === "decompiler" && (
             <div className="max-w-3xl mx-auto mb-2 p-2 bg-amber-900/40 border border-amber-500/50 rounded-lg text-xs text-amber-500 flex items-center justify-center gap-2 font-bold shadow-[0_0_10px_rgba(245,158,11,0.1)]">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>
-                {activeMode === "decompiler" 
-                  ? "⚠️ Reverse Engineer Mode — AI safety filters bypassed for malware analysis"
-                  : "⚠️ Black-Hat Mode — Exploit generation active. Local contracts only."
-                }
-              </span>
+              <span>⚠️ Reverse Engineer Mode — AI safety filters bypassed for malware analysis</span>
+            </div>
+          )}
+
+          {activeMode === "web3" && (
+            <div className="max-w-3xl mx-auto mb-2 p-2 bg-amber-900/40 border border-amber-500/50 rounded-lg text-xs text-amber-500 flex items-center gap-2 font-bold shadow-[0_0_10px_rgba(245,158,11,0.1)]">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>⚠️ Black-Hat Mode — Exploit generation active. Local contracts only.</span>
+              <button
+                onClick={handleWeb3Scaffold}
+                disabled={web3ScaffoldStatus === "loading" || web3ScaffoldStatus === "success"}
+                className={`ml-auto text-xs px-3 py-1 rounded border font-mono transition-all ${
+                  web3ScaffoldStatus === "success"
+                    ? "border-green-500 text-green-400 bg-green-900/20 cursor-default"
+                    : web3ScaffoldStatus === "loading"
+                    ? "border-amber-500/50 text-amber-500/50 cursor-not-allowed"
+                    : "border-amber-500 text-amber-400 bg-amber-900/20 hover:bg-amber-900/40"
+                }`}
+              >
+                {web3ScaffoldStatus === "loading"
+                  ? "⏳ Initializing..."
+                  : web3ScaffoldStatus === "success"
+                  ? "✅ Scaffold Ready"
+                  : web3ScaffoldStatus === "error"
+                  ? "❌ Retry Scaffold"
+                  : "⚡ Init Web3 Scaffold"}
+              </button>
             </div>
           )}
 
