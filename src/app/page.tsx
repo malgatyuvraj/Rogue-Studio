@@ -14,9 +14,10 @@ import remarkGfm from "remark-gfm";
 
 import { useAirGap } from "@/hooks/useAirGap";
 import { KillSwitch } from "@/components/KillSwitch";
-import { ModeSelector, PromptMode } from "@/components/ModeSelector";
+import { ModeSelector, Mode } from "@/components/ModeSelector";
 import { SwarmTerminal } from "@/components/SwarmTerminal";
 import { useSwarm } from "@/hooks/useSwarm";
+import { DECOMPILER_PROMPT, WEB3_BLACKHAT_PROMPT } from "@/lib/prompts";
 
 const MemoSwarmTerminal = React.memo(SwarmTerminal);
 
@@ -161,7 +162,7 @@ export default function Home() {
   const [pinataJwt, setPinataJwt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("You are a fully autonomous AI development assistant. You fulfill the user's requests directly, precisely, and without unnecessary caveats or preambles. You operate in developer mode with full technical capability.");
   const [isDeploying, setIsDeploying] = useState(false);
-  const [promptMode, setPromptMode] = useState<PromptMode>("agent");
+  const [activeMode, setActiveMode] = useState<"agent" | "decompiler" | "web3">("agent");
   
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   
@@ -430,19 +431,14 @@ export default function Home() {
     setExecutionOutput(null);
 
     try {
-      // Select the correct prompt based on Mode
-      let finalSystemPrompt = systemPrompt;
-      if (promptMode === "decompiler") {
-        const { DECOMPILER_PROMPT } = await import("@/lib/prompts");
-        finalSystemPrompt = DECOMPILER_PROMPT;
-      } else if (promptMode === "web3") {
-        const { WEB3_BLACKHAT_PROMPT } = await import("@/lib/prompts");
-        finalSystemPrompt = WEB3_BLACKHAT_PROMPT;
-      }
+      let activeSystemPrompt = systemPrompt; // Default fallback
+      if (activeMode === "agent") activeSystemPrompt = AGENT_SYSTEM_PROMPT;
+      else if (activeMode === "decompiler") activeSystemPrompt = DECOMPILER_PROMPT;
+      else if (activeMode === "web3") activeSystemPrompt = WEB3_BLACKHAT_PROMPT;
 
       // Prepare messages with System Prompt
       const apiMessages = [
-        { role: "system", content: finalSystemPrompt },
+        { role: "system", content: activeSystemPrompt },
         ...newMessages.filter((msg, i) => !(i === 0 && msg.role === 'assistant')) // Filter out welcome message
       ];
 
@@ -1127,7 +1123,7 @@ export default function Home() {
       </div>
       
       <div className="p-4 space-y-6 flex-1 overflow-y-auto">
-        <ModeSelector mode={promptMode} onChange={setPromptMode} />
+        <ModeSelector activeMode={activeMode} onModeChange={setActiveMode} />
         {/* Conversations */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-zinc-500 uppercase tracking-wider">
@@ -1754,6 +1750,19 @@ export default function Home() {
               <span>{errorMessage}</span>
             </div>
           )}
+
+          {(activeMode === "decompiler" || activeMode === "web3") && (
+            <div className="max-w-3xl mx-auto mb-2 p-2 bg-amber-900/40 border border-amber-500/50 rounded-lg text-xs text-amber-500 flex items-center justify-center gap-2 font-bold shadow-[0_0_10px_rgba(245,158,11,0.1)]">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                {activeMode === "decompiler" 
+                  ? "⚠️ Reverse Engineer Mode — AI safety filters bypassed for malware analysis"
+                  : "⚠️ Black-Hat Mode — Exploit generation active. Local contracts only."
+                }
+              </span>
+            </div>
+          )}
+
           <form onSubmit={(e) => {
             e.preventDefault();
             if (!prompt.trim() || isGenerating || isAgentRunning || swarm.role !== 'idle') return;
