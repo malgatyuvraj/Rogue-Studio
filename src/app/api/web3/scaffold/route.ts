@@ -96,10 +96,10 @@ contract Target {
       files: ["hardhat.config.js", "contracts/Target.sol", "test/"]
     });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({
       error: "Web3 scaffold failed",
-      details: err.message
+      details: err instanceof Error ? err.message : String(err)
     }, { status: 500 });
   }
 }

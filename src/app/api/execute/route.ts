@@ -30,10 +30,11 @@ export async function POST(req: Request) {
           env: { ...process.env, HOME: os.homedir() },
         });
         return NextResponse.json({ stdout, stderr });
-      } catch (execError: any) {
+      } catch (execError: unknown) {
+        const err = execError as { stdout?: string; stderr?: string; message?: string };
         return NextResponse.json({
-          stdout: execError.stdout || '',
-          stderr: execError.stderr || execError.message,
+          stdout: err.stdout || '',
+          stderr: err.stderr || err.message || String(execError),
         });
       }
     }
@@ -83,10 +84,11 @@ export async function POST(req: Request) {
         maxBuffer: 50 * 1024 * 1024,
       });
       return NextResponse.json({ stdout, stderr });
-    } catch (execError: any) {
+    } catch (execError: unknown) {
+      const err = execError as { stdout?: string; stderr?: string; message?: string };
       return NextResponse.json({
-        stdout: execError.stdout || '',
-        stderr: execError.stderr || execError.message,
+        stdout: err.stdout || '',
+        stderr: err.stderr || err.message || String(execError),
       });
     } finally {
       // Cleanup temp script file
@@ -94,7 +96,7 @@ export async function POST(req: Request) {
         fs.unlinkSync(filePath);
       } catch {}
     }
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 export async function POST(req: Request) {
   try {
-    const { content, filename, pinataJwt } = await req.json();
+    const { content, filename, pinataJwt } = await req.json() as { content: string, filename?: string, pinataJwt?: string };
 
     if (!content) {
       return NextResponse.json({ success: false, error: 'No content provided' }, { status: 400 });
@@ -48,7 +49,6 @@ export async function POST(req: Request) {
     // fallback: Cypherpunk simulation if no key is provided.
     // In a real local IPFS node, you'd push to localhost:5001 here.
     // We will generate a fake CID for the demo.
-    const crypto = require('crypto');
     const hash = crypto.createHash('sha256').update(content).digest('hex');
     const fakeCid = `Qm${hash.substring(0, 44)}`; // CIDv0 format rough simulation
 
@@ -60,8 +60,8 @@ export async function POST(req: Request) {
       message: 'Simulated IPFS pin. Add Pinata JWT in Settings for persistent global hosting.'
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('IPFS Deploy Error:', error);
-    return NextResponse.json({ success: false, error: error.message || 'Deployment failed' }, { status: 500 });
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Deployment failed' }, { status: 500 });
   }
 }

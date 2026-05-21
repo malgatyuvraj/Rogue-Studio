@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Send, Bot, User, ShieldAlert, FileCode2, AlertTriangle, 
-  Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame, Skull,
-  FolderTree, File, Folder, ChevronRight, ChevronDown, RotateCcw, BrainCircuit, Cpu, RefreshCw,
+  Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame,
+  FolderTree, File, Folder, ChevronRight, ChevronDown, BrainCircuit, Cpu, RefreshCw,
   Plus, MessageSquare, Trash2, Eye, Code2, Rocket
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
@@ -14,7 +14,7 @@ import remarkGfm from "remark-gfm";
 
 import { useAirGap } from "@/hooks/useAirGap";
 import { KillSwitch } from "@/components/KillSwitch";
-import { ModeSelector, Mode } from "@/components/ModeSelector";
+import { ModeSelector } from "@/components/ModeSelector";
 import { SwarmTerminal } from "@/components/SwarmTerminal";
 import { useSwarm } from "@/hooks/useSwarm";
 import { DECOMPILER_PROMPT, WEB3_BLACKHAT_PROMPT } from "@/lib/prompts";
@@ -183,7 +183,7 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.details || data.error);
       setWeb3ScaffoldStatus("success");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Web3 scaffold error:", err);
       setWeb3ScaffoldStatus("error");
     }
@@ -259,7 +259,7 @@ export default function Home() {
           }
           return;
         }
-      } catch (e) {}
+      } catch {}
     }
 
     // Migrate from old single-chat format
@@ -276,7 +276,7 @@ export default function Home() {
           localStorage.removeItem("rogue_messages"); // Clean up old format
           return;
         }
-      } catch (e) {}
+      } catch {}
     }
 
     // Fresh start
@@ -402,7 +402,7 @@ export default function Home() {
   const extractCodeBlocks = (text: string) => {
     const regex = /```([\w-]+)?\n([\s\S]*?)```/g;
     let match;
-    let blocks = [];
+    const blocks = [];
     while ((match = regex.exec(text)) !== null) {
       const lang = match[1] || "text";
       const code = match[2];
@@ -428,8 +428,8 @@ export default function Home() {
     createNewConversation();
   };
 
-  const handleSubmit = async (e?: React.FormEvent, overridePrompt?: string) => {
-    if (e) e.preventDefault();
+  const handleSubmit = async (_e?: React.FormEvent, overridePrompt?: string) => {
+    if (_e) _e.preventDefault();
     const userPrompt = overridePrompt || prompt;
     if (!userPrompt.trim() || isGenerating) return;
 
@@ -520,11 +520,11 @@ export default function Home() {
         }
       }
 
-    } catch (error: any) {
-      setErrorMessage(error.message);
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : String(error));
       setMessages(prev => [...prev, { 
         role: "assistant", 
-        content: `⚠️ **Connection Error:** ${error.message}\n\nPlease check your settings and ensure the provider is accessible.` 
+        content: `⚠️ **Connection Error:** ${error instanceof Error ? error.message : String(error)}\n\nPlease check your settings and ensure the provider is accessible.` 
       }]);
     } finally {
       setIsGenerating(false);
@@ -567,8 +567,8 @@ export default function Home() {
         throw new Error(result.error || "Execution failed");
       }
       setExecutionOutput(result);
-    } catch (err: any) {
-      setExecutionOutput({ stdout: "", stderr: err.message });
+    } catch (err: unknown) {
+      setExecutionOutput({ stdout: "", stderr: err instanceof Error ? err.message : String(err) });
     } finally {
       setIsExecuting(false);
     }
@@ -608,8 +608,8 @@ export default function Home() {
       }
       setExecutionOutput({ stdout, stderr: "" });
       showToast('👻 Ghost Deploy Complete');
-    } catch (err: any) {
-      setExecutionOutput({ stdout: "", stderr: `[DEPLOY ERROR]: ${err.message}` });
+    } catch (err: unknown) {
+      setExecutionOutput({ stdout: "", stderr: `[DEPLOY ERROR]: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setIsDeploying(false);
     }
@@ -704,8 +704,8 @@ export default function Home() {
           return `[System] File written successfully: ${data.path} (${data.bytes} bytes)`;
         }
         return `[System] File write error: ${data.error}`;
-      } catch (err: any) {
-        return `[System] File write error: ${err.message}`;
+      } catch (err: unknown) {
+        return `[System] File write error: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
 
@@ -721,8 +721,8 @@ export default function Home() {
           return `[System] Contents of ${data.path}:\n${data.content}`;
         }
         return `[System] File read error: ${data.error}`;
-      } catch (err: any) {
-        return `[System] File read error: ${err.message}`;
+      } catch (err: unknown) {
+        return `[System] File read error: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
 
@@ -739,8 +739,8 @@ export default function Home() {
           return `[System] Deleted successfully: ${data.deleted}`;
         }
         return `[System] File delete error: ${data.error}`;
-      } catch (err: any) {
-        return `[System] File delete error: ${err.message}`;
+      } catch (err: unknown) {
+        return `[System] File delete error: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
 
@@ -758,8 +758,8 @@ export default function Home() {
         if (!output) output = 'Command completed with no output.';
         await fetchWorkspaceTree();
         return `[System] Command executed: ${action.command}\n${output}`;
-      } catch (err: any) {
-        return `[System] Command execution error: ${err.message}`;
+      } catch (err: unknown) {
+        return `[System] Command execution error: ${err instanceof Error ? err.message : String(err)}`;
       }
     }
 
@@ -846,8 +846,8 @@ export default function Home() {
       let assistantResponse: string;
       try {
         assistantResponse = await sendAgentChat(currentMessages);
-      } catch (err: any) {
-        setAgentLog(prev => [...prev, { action: 'ERROR', detail: err.message, status: 'error' }]);
+      } catch (err: unknown) {
+        setAgentLog(prev => [...prev, { action: 'ERROR', detail: err instanceof Error ? err.message : String(err), status: 'error' }]);
         setIsGenerating(false);
         break;
       }
@@ -949,13 +949,13 @@ export default function Home() {
                 if (data.done) {
                   setIsForging(false);
                 }
-              } catch(e) {}
+              } catch {}
             }
           }
         }
       }
-    } catch (err: any) {
-      setForgeLogs(prev => prev + `\n[FATAL ERROR]: ${err.message}\n`);
+    } catch (err: unknown) {
+      setForgeLogs(prev => prev + `\n[FATAL ERROR]: ${err instanceof Error ? err.message : String(err)}\n`);
       setIsForging(false);
     }
   };
@@ -1047,7 +1047,7 @@ export default function Home() {
               />
             ) : (
               <div className="flex-1 p-4">
-                <Highlight theme={themes.vsDark} code={codeBlocks[activeTab]?.code || ""} language={(codeBlocks[activeTab]?.lang || 'javascript') as any}>
+                <Highlight theme={themes.vsDark} code={codeBlocks[activeTab]?.code || ""} language={(codeBlocks[activeTab]?.lang || 'javascript') as string}>
                   {({ className, style, tokens, getLineProps, getTokenProps }) => (
                     <pre className={`${className} font-mono text-sm w-full h-full whitespace-pre-wrap`} style={{ ...style, backgroundColor: 'transparent' }}>
                       {tokens.map((line, i) => (
@@ -1115,7 +1115,7 @@ export default function Home() {
           </div>
           <div className="flex-1 p-4 overflow-auto relative flex items-center justify-center">
             <p className="text-zinc-600 text-sm font-mono text-center">
-              // Artifacts & Output<br/><br/>
+              {"// Artifacts & Output"}<br/><br/>
               Your unrestricted code, scripts, or text artifacts will appear here.
             </p>
             <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%] opacity-20"></div>
@@ -1643,24 +1643,26 @@ export default function Home() {
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        p: ({node, ...props}) => <p className="text-sm leading-relaxed mb-2" {...props} />,
-                        code: ({node, inline, className, children, ...props}: any) => {
+                        p: ({node: _node, ...props}) => { void _node; return <p className="text-sm leading-relaxed mb-2" {...props} />; },
+                        code: (props) => {
+                          const codeProps = props as React.HTMLAttributes<HTMLElement> & { inline?: boolean };
+                          const { inline, className, children, ...rest } = codeProps;
                           const contentStr = String(children);
                           // Style agent XML tags inline
                           if (inline && (contentStr.startsWith('<write_file') || contentStr.startsWith('<run_command') || contentStr.startsWith('<read_file') || contentStr.startsWith('<delete_file'))) {
-                            return <span className="block my-2 p-2 bg-zinc-900 border border-zinc-800 rounded font-mono text-xs text-blue-300 whitespace-pre-wrap" {...props}>{children}</span>;
+                            return <span className="block my-2 p-2 bg-zinc-900 border border-zinc-800 rounded font-mono text-xs text-blue-300 whitespace-pre-wrap" {...rest}>{children}</span>;
                           }
                           return inline 
-                            ? <code className="bg-zinc-800 px-1 py-0.5 rounded text-xs font-mono text-red-300" {...props}>{children}</code>
-                            : <code className={className} {...props}>{children}</code>;
+                            ? <code className="bg-zinc-800 px-1 py-0.5 rounded text-xs font-mono text-red-300" {...rest}>{children}</code>
+                            : <code className={className} {...rest}>{children}</code>;
                         },
-                        pre: ({node, ...props}) => <pre className="bg-zinc-800 p-3 rounded-lg overflow-x-auto my-2 text-xs font-mono" {...props} />,
-                        h1: ({node, ...props}) => <h1 className="font-bold text-white mb-1 mt-2 text-xl" {...props} />,
-                        h2: ({node, ...props}) => <h2 className="font-bold text-white mb-1 mt-2 text-lg" {...props} />,
-                        h3: ({node, ...props}) => <h3 className="font-bold text-white mb-1 mt-2 text-base" {...props} />,
-                        ul: ({node, ...props}) => <ul className="list-disc list-inside text-sm space-y-1 mb-2" {...props} />,
-                        ol: ({node, ...props}) => <ol className="list-decimal list-inside text-sm space-y-1 mb-2" {...props} />,
-                        strong: ({node, ...props}) => <strong className="text-white font-semibold" {...props} />,
+                        pre: ({node: _node, ...props}) => { void _node; return <pre className="bg-zinc-800 p-3 rounded-lg overflow-x-auto my-2 text-xs font-mono" {...props} />; },
+                        h1: ({node: _node, ...props}) => { void _node; return <h1 className="font-bold text-white mb-1 mt-2 text-xl" {...props} />; },
+                        h2: ({node: _node, ...props}) => { void _node; return <h2 className="font-bold text-white mb-1 mt-2 text-lg" {...props} />; },
+                        h3: ({node: _node, ...props}) => { void _node; return <h3 className="font-bold text-white mb-1 mt-2 text-base" {...props} />; },
+                        ul: ({node: _node, ...props}) => { void _node; return <ul className="list-disc list-inside text-sm space-y-1 mb-2" {...props} />; },
+                        ol: ({node: _node, ...props}) => { void _node; return <ol className="list-decimal list-inside text-sm space-y-1 mb-2" {...props} />; },
+                        strong: ({node: _node, ...props}) => { void _node; return <strong className="text-white font-semibold" {...props} />; },
                       }}
                     >
                       {msg.content}
@@ -1932,7 +1934,7 @@ export default function Home() {
                       <span className="text-xs font-mono text-zinc-300">{selectedFile.path}</span>
                     </div>
                     <div className="p-4">
-                      <Highlight theme={themes.vsDark} code={selectedFile.content} language={selectedFile.lang as any}>
+                      <Highlight theme={themes.vsDark} code={selectedFile.content} language={selectedFile.lang as string}>
                         {({ className, style, tokens, getLineProps, getTokenProps }) => (
                           <pre className={`${className} font-mono text-xs whitespace-pre-wrap`} style={{ ...style, backgroundColor: 'transparent' }}>
                             {tokens.map((line, i) => (

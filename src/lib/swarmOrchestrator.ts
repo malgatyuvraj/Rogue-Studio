@@ -1,4 +1,4 @@
-export type SwarmRole = "blue" | "red" | "idle";
+type SwarmRole = "blue" | "red" | "idle";
 
 export interface SwarmState {
   role: SwarmRole;
@@ -8,7 +8,7 @@ export interface SwarmState {
   verdict: "pending" | "vulnerable" | "secure";
 }
 
-export const SWARM_SENTINELS = {
+const SWARM_SENTINELS = {
   BLUE_DONE: "<done>",
   RED_VULNERABLE: "<vulnerable>",
   RED_SECURE: "<secure>",

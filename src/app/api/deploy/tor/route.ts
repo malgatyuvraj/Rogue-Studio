@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
@@ -37,27 +37,70 @@ export async function POST(req: Request) {
 
   try {
     const { workspacePath } = await req.json();
-    
-    // Validate or default path
     const targetDir = workspacePath || path.join(os.homedir(), ".gemini", "antigravity", "brain");
 
-    // In a full implementation, this would:
-    // 1. Spawn `npx http-server` on a random port (e.g. 8080)
-    // 2. Write a temporary torrc mapping HiddenServiceDir to port 8080
-    // 3. Spawn `tor -f torrc`
-    // 4. Return the generated .onion address
-    
-    // TODO: Real Tor daemon spawn — requires local binary (detected via GET /api/deploy/tor)
+    // 1. Verify Tor is installed
+    try {
+      await execAsync("which tor");
+    } catch {
+      throw new Error("Tor binary not found. Please install Tor to use Ghost Deploy.");
+    }
+
+    // 2. Setup directories
+    const torDir = path.join(os.tmpdir(), `rogue_tor_${Date.now()}`);
+    const hiddenServiceDir = path.join(torDir, "hidden_service");
+    await fs.mkdir(hiddenServiceDir, { recursive: true });
+    // Tor requires the hidden service directory to be strictly permissioned (0o700)
+    await fs.chmod(hiddenServiceDir, 0o700);
+
+    // 3. Find available port (simplified: use random high port)
+    const port = Math.floor(Math.random() * 10000) + 10000;
+
+    // 4. Write torrc
+    const torrcPath = path.join(torDir, "torrc");
+    const torrcContent = `SocksPort 0
+HiddenServiceDir ${hiddenServiceDir}
+HiddenServicePort 80 127.0.0.1:${port}
+`;
+    await fs.writeFile(torrcPath, torrcContent);
+
+    // 5. Start Tor daemon
+    const torProcess = spawn("tor", ["-f", torrcPath], { detached: true, stdio: "ignore" });
+    torProcess.unref();
+
+    // 6. Start HTTP server to serve the workspace
+    const serverProcess = spawn("npx", ["-y", "http-server", targetDir, "-p", port.toString(), "-s"], { detached: true, stdio: "ignore" });
+    serverProcess.unref();
+
+    // 7. Poll for hostname file
+    const hostnamePath = path.join(hiddenServiceDir, "hostname");
+    let onionUrl = null;
+    for (let i = 0; i < 30; i++) { // Wait up to 30 seconds
+      try {
+        const hostname = await fs.readFile(hostnamePath, "utf8");
+        onionUrl = hostname.trim();
+        break;
+      } catch {
+        // Wait 1s and retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (!onionUrl) {
+      throw new Error("Failed to generate .onion address. Tor daemon might have failed to start.");
+    }
+
     return Response.json({
-      status: "simulated",
-      message: "Tor daemon not yet integrated. Use GET /api/deploy/tor to check binary availability.",
-      onionUrl: null
+      status: "active",
+      message: "Tor hidden service successfully deployed.",
+      onionUrl: `http://${onionUrl}`,
+      port
     });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({
       error: "Tor deployment failed",
-      details: err.message
+      details: err instanceof Error ? err.message : String(err)
     }, { status: 500 });
   }
 }

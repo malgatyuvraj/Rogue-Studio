@@ -32,7 +32,7 @@ export async function POST(req: Request) {
       success: true,
       deleted: path.relative(WORKSPACE_ROOT, resolved),
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

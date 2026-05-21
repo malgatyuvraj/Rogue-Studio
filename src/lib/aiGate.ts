@@ -1,4 +1,4 @@
-export const EXTERNAL_PROVIDERS = [
+const EXTERNAL_PROVIDERS = [
   "openai", "anthropic", "gemini",
   "openrouter", "groq", "deepseek", "together"
 ];
