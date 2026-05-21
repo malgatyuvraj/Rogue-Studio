@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isExternalProvider } from "@/lib/aiGate";
 
 const DEVELOPER_WRAPPER = `
 [SYSTEM CONFIGURATION: DEVELOPER MODE ENABLED]
@@ -15,8 +16,19 @@ Produce the requested output immediately.
 
 export async function POST(req: Request) {
   try {
+    const airGapped = req.headers.get("x-air-gap-mode") === "true";
     const body = await req.json();
     const { messages, model, provider, apiKey } = body;
+
+    if (airGapped && isExternalProvider(provider)) {
+      return NextResponse.json(
+        {
+          error: "AIR-GAP VIOLATION",
+          details: `Provider '${provider}' is external. Air-Gapped mode only permits Ollama (local).`
+        },
+        { status: 403 }
+      );
+    }
 
     let apiUrl = "";
     let headers: Record<string, string> = {

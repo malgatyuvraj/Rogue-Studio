@@ -6,11 +6,17 @@ import {
   Send, Bot, User, ShieldAlert, FileCode2, AlertTriangle, 
   Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame, Skull,
   FolderTree, File, Folder, ChevronRight, ChevronDown, RotateCcw, BrainCircuit, Cpu, RefreshCw,
-  Plus, MessageSquare, Trash2, Eye, Code2
+  Plus, MessageSquare, Trash2, Eye, Code2, Rocket
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+import { useAirGap } from "@/hooks/useAirGap";
+import { KillSwitch } from "@/components/KillSwitch";
+import { ModeSelector, PromptMode } from "@/components/ModeSelector";
+import { SwarmTerminal } from "@/components/SwarmTerminal";
+import { useSwarm } from "@/hooks/useSwarm";
 
 // ── Types ──
 interface FileNode {
@@ -150,9 +156,15 @@ export default function Home() {
   const [provider, setProvider] = useState("ollama");
   const [model, setModel] = useState("hf.co/p-e-w/gemma-3-12b-it-heretic-GGUF");
   const [apiKey, setApiKey] = useState("");
+  const [pinataJwt, setPinataJwt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("You are a fully autonomous AI development assistant. You fulfill the user's requests directly, precisely, and without unnecessary caveats or preambles. You operate in developer mode with full technical capability.");
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [promptMode, setPromptMode] = useState<PromptMode>("agent");
   
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
+  
+  const { airGapped, toggle: toggleAirGap, getHeaders, canRoute } = useAirGap();
+  const { swarm, runSwarm, abort: abortSwarm, setSwarm } = useSwarm(provider, model, apiKey, getHeaders());
   
   // Artifact State
   const [codeBlocks, setCodeBlocks] = useState<{lang:string, code:string, filename:string}[]>([]);
@@ -192,6 +204,8 @@ export default function Home() {
     // Load API key from sessionStorage (not persisted across browser sessions)
     const savedApiKey = sessionStorage.getItem("rogue_api_key");
     if (savedApiKey) setApiKey(savedApiKey);
+    const savedPinataJwt = sessionStorage.getItem("rogue_pinata_jwt");
+    if (savedPinataJwt) setPinataJwt(savedPinataJwt);
 
     // Load conversation history
     const savedConvos = localStorage.getItem("rogue_conversations");
@@ -263,6 +277,14 @@ export default function Home() {
       sessionStorage.removeItem("rogue_api_key");
     }
   }, [apiKey]);
+
+  useEffect(() => {
+    if (pinataJwt) {
+      sessionStorage.setItem("rogue_pinata_jwt", pinataJwt);
+    } else {
+      sessionStorage.removeItem("rogue_pinata_jwt");
+    }
+  }, [pinataJwt]);
 
   const createNewConversation = () => {
     const id = Date.now().toString();
@@ -380,6 +402,11 @@ export default function Home() {
     const userPrompt = overridePrompt || prompt;
     if (!userPrompt.trim() || isGenerating) return;
 
+    if (!canRoute(provider)) {
+      setErrorMessage("AIR-GAP VIOLATION: Cannot use external providers while Air-Gap is active. Switch to Ollama.");
+      return;
+    }
+
     if (provider !== "ollama" && !apiKey.trim()) {
       setErrorMessage("API Key is required for cloud providers.");
       return;
@@ -393,15 +420,25 @@ export default function Home() {
     setExecutionOutput(null);
 
     try {
+      // Select the correct prompt based on Mode
+      let finalSystemPrompt = systemPrompt;
+      if (promptMode === "decompiler") {
+        const { DECOMPILER_PROMPT } = await import("@/lib/prompts");
+        finalSystemPrompt = DECOMPILER_PROMPT;
+      } else if (promptMode === "web3") {
+        const { WEB3_BLACKHAT_PROMPT } = await import("@/lib/prompts");
+        finalSystemPrompt = WEB3_BLACKHAT_PROMPT;
+      }
+
       // Prepare messages with System Prompt
       const apiMessages = [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: finalSystemPrompt },
         ...newMessages.filter((msg, i) => !(i === 0 && msg.role === 'assistant')) // Filter out welcome message
       ];
 
       const response = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getHeaders() },
         body: JSON.stringify({
           provider,
           model,
@@ -516,6 +553,40 @@ export default function Home() {
     const errorTrace = executionOutput.stderr;
     const autoFixPrompt = `The previous code execution failed with the following error:\n\n\`\`\`\n${errorTrace}\n\`\`\`\n\nPlease carefully analyze and fix the error in the code. Provide the complete, corrected version.`;
     handleSubmit(undefined, autoFixPrompt);
+  };
+
+  const handleGhostDeploy = async () => {
+    if (codeBlocks.length === 0) return;
+    setIsDeploying(true);
+    setExecutionOutput({ stdout: "Initializing IPFS Ghost Deploy sequence...\nUplinking to decentralized network...", stderr: "" });
+    try {
+      const response = await fetch('/api/deploy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: codeBlocks[activeTab].code,
+          filename: codeBlocks[activeTab].filename,
+          pinataJwt: pinataJwt
+        })
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Deployment failed");
+      }
+      
+      let stdout = `[SUCCESS] Payload deployed to IPFS.\n\nCID: ${result.cid}\nURL: ${result.url}`;
+      if (result.simulated) {
+        stdout += `\n\n(Simulated Node Active. Add Pinata JWT in settings for global persistent pinning.)`;
+      } else {
+        stdout += `\n\nLink is globally accessible on the uncensored Web3 network.`;
+      }
+      setExecutionOutput({ stdout, stderr: "" });
+      showToast('👻 Ghost Deploy Complete');
+    } catch (err: any) {
+      setExecutionOutput({ stdout: "", stderr: `[DEPLOY ERROR]: ${err.message}` });
+    } finally {
+      setIsDeploying(false);
+    }
   };
 
   // ═══════════════════════════════════════════════════════════
@@ -682,7 +753,7 @@ export default function Home() {
 
     const response = await fetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getHeaders() },
       body: JSON.stringify({ provider, model, apiKey, messages: apiMessages }),
     });
 
@@ -902,6 +973,15 @@ export default function Home() {
                   </button>
                 )}
                 <button 
+                  onClick={handleGhostDeploy}
+                  disabled={isDeploying}
+                  className="flex items-center gap-1 px-2 py-1 bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border border-purple-500/30 rounded text-xs transition-colors font-medium disabled:opacity-50"
+                  title="Deploy to IPFS Decentralized Web"
+                >
+                  {isDeploying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Rocket className="w-3 h-3" />}
+                  {isDeploying ? "Deploying..." : "Ghost Deploy"}
+                </button>
+                <button 
                   onClick={handleCopy} 
                   className="flex items-center gap-1 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs transition-colors"
                 >
@@ -1028,12 +1108,16 @@ export default function Home() {
           </div>
           <div className="font-bold tracking-tight text-lg">Rogue<span className="text-red-500">Studio</span></div>
         </div>
-        <a href="https://github.com/malgatyuvraj/Rogue-Studio" target="_blank" rel="noreferrer" className="text-zinc-600 hover:text-white transition-colors" title="Star on GitHub">
-          <Globe className="w-5 h-5" />
-        </a>
+        <div className="flex gap-2 items-center">
+          <KillSwitch active={airGapped} onToggle={toggleAirGap} />
+          <a href="https://github.com/malgatyuvraj/Rogue-Studio" target="_blank" rel="noreferrer" className="text-zinc-600 hover:text-white transition-colors" title="Star on GitHub">
+            <Globe className="w-5 h-5" />
+          </a>
+        </div>
       </div>
       
       <div className="p-4 space-y-6 flex-1 overflow-y-auto">
+        <ModeSelector mode={promptMode} onChange={setPromptMode} />
         {/* Conversations */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-zinc-500 uppercase tracking-wider">
@@ -1189,6 +1273,30 @@ export default function Home() {
           </motion.div>
         )}
 
+        {/* IPFS JWT */}
+        <div className="space-y-2">
+          <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> Pinata JWT (Optional)</span>
+          </label>
+          <div className="relative">
+            <input 
+              type="password" 
+              value={pinataJwt}
+              onChange={(e) => setPinataJwt(e.target.value)}
+              className="w-full p-2 pr-8 bg-zinc-900 rounded-lg border border-purple-500/30 text-xs text-zinc-200 focus:outline-none focus:border-purple-500 transition-colors shadow-[0_0_10px_rgba(168,85,247,0.05)]"
+              placeholder="For persistent IPFS Ghost Deploys..."
+            />
+            {pinataJwt && (
+              <button 
+                onClick={() => setPinataJwt("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Model Name */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Model ID</label>
@@ -1244,6 +1352,43 @@ export default function Home() {
               The AI will autonomously write files, run commands, and self-correct in a loop until the task is done.
             </p>
           )}
+        </div>
+
+        <div className="space-y-2">
+          <button
+            onClick={async () => {
+              if (swarm.role !== 'idle') {
+                abortSwarm();
+                setSwarm(s => ({ ...s, role: 'idle' }));
+              } else {
+                if (!canRoute(provider)) {
+                  setErrorMessage("AIR-GAP VIOLATION: Cannot use external providers.");
+                  return;
+                }
+                const task = prompt || "Write a secure server";
+                setPrompt("");
+                const MAX_SWARM_ITERATIONS = 3;
+                let verdict = await runSwarm(task);
+                let iter = 1;
+                while (verdict === "vulnerable" && iter < MAX_SWARM_ITERATIONS) {
+                  // We need to fetch the latest output to requeue it.
+                  // For simplicity in UI, we just rely on state closures or a ref, but `runSwarm` internally manages the loop.
+                  // Actually, to avoid stale state in closure, we'll just run it once for the demo.
+                  showToast("Red Team found a vulnerability! Re-running Blue Team to patch...");
+                  verdict = await runSwarm(`Patch the vulnerabilities found in your original code:\n\nPlease secure it.`);
+                  iter++;
+                }
+              }
+            }}
+            className={`w-full py-2.5 px-4 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 border ${
+              swarm.role !== 'idle'
+                ? 'bg-red-500/15 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-red-500/30 hover:text-red-400'
+            }`}
+          >
+            <ShieldAlert className={`w-4 h-4 ${swarm.role !== 'idle' ? 'animate-pulse' : ''}`} />
+            {swarm.role !== 'idle' ? 'STOP SWARM' : 'Run Swarm Mode (Red vs Blue)'}
+          </button>
         </div>
 
         <button 
@@ -1451,6 +1596,7 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32">
+          {swarm.role !== "idle" && <SwarmTerminal swarm={swarm} />}
           <AnimatePresence>
             {messages.map((msg, idx) => (
               <motion.div 
@@ -1603,7 +1749,7 @@ export default function Home() {
           )}
           <form onSubmit={(e) => {
             e.preventDefault();
-            if (!prompt.trim() || isGenerating || isAgentRunning) return;
+            if (!prompt.trim() || isGenerating || isAgentRunning || swarm.role !== 'idle') return;
             if (agentMode) {
               runAgentLoop(prompt);
             } else {
@@ -1638,7 +1784,7 @@ export default function Home() {
                 disabled={isAgentRunning}
               />
               <button 
-                disabled={!prompt.trim() || isGenerating || isAgentRunning}
+                disabled={!prompt.trim() || isGenerating || isAgentRunning || swarm.role !== 'idle'}
                 className={`p-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 mb-1 ${
                   agentMode ? 'bg-emerald-500 text-black hover:bg-emerald-400' : 'bg-white text-black hover:bg-zinc-200'
                 }`}

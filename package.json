@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@web3-storage/w3up-client": "^17.3.0",
+    "@webassemblyjs/ast": "^1.14.1",
+    "@webassemblyjs/wasm-parser": "^1.14.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.16.0",
     "next": "16.2.6",
