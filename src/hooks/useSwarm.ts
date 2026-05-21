@@ -26,7 +26,7 @@ export function useSwarm(provider: string, model: string, apiKey: string, airGap
           { role: "user", content: userTask }
         ]
       }),
-      signal: abortRef.current.signal
+      signal: abortRef.current?.signal
     });
 
     if (!blueRes.ok) {
@@ -59,7 +59,7 @@ export function useSwarm(provider: string, model: string, apiKey: string, airGap
           { role: "user", content: `Audit this code:\n\n${blueAccumulated}` }
         ]
       }),
-      signal: abortRef.current.signal
+      signal: abortRef.current?.signal
     });
 
     if (!redRes.ok) {

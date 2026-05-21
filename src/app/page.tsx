@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, KeyboardEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Send, Bot, User, ShieldAlert, FileCode2, AlertTriangle, 
@@ -17,6 +17,8 @@ import { KillSwitch } from "@/components/KillSwitch";
 import { ModeSelector, PromptMode } from "@/components/ModeSelector";
 import { SwarmTerminal } from "@/components/SwarmTerminal";
 import { useSwarm } from "@/hooks/useSwarm";
+
+const MemoSwarmTerminal = React.memo(SwarmTerminal);
 
 // ── Types ──
 interface FileNode {
@@ -166,6 +168,14 @@ export default function Home() {
   const { airGapped, toggle: toggleAirGap, getHeaders, canRoute } = useAirGap();
   const { swarm, runSwarm, abort: abortSwarm, setSwarm } = useSwarm(provider, model, apiKey, getHeaders());
   
+  const handleKillSwitchToggle = () => {
+    toggleAirGap(); // from useAirGap
+    if (!airGapped) {
+      // Turning ON — kill any active swarm stream immediately
+      abortSwarm(); // from useSwarm
+    }
+  };
+
   // Artifact State
   const [codeBlocks, setCodeBlocks] = useState<{lang:string, code:string, filename:string}[]>([]);
   const [activeTab, setActiveTab] = useState(0);
@@ -1109,7 +1119,7 @@ export default function Home() {
           <div className="font-bold tracking-tight text-lg">Rogue<span className="text-red-500">Studio</span></div>
         </div>
         <div className="flex gap-2 items-center">
-          <KillSwitch active={airGapped} onToggle={toggleAirGap} />
+          <KillSwitch active={airGapped} onToggle={handleKillSwitchToggle} />
           <a href="https://github.com/malgatyuvraj/Rogue-Studio" target="_blank" rel="noreferrer" className="text-zinc-600 hover:text-white transition-colors" title="Star on GitHub">
             <Globe className="w-5 h-5" />
           </a>
@@ -1371,11 +1381,8 @@ export default function Home() {
                 let verdict = await runSwarm(task);
                 let iter = 1;
                 while (verdict === "vulnerable" && iter < MAX_SWARM_ITERATIONS) {
-                  // We need to fetch the latest output to requeue it.
-                  // For simplicity in UI, we just rely on state closures or a ref, but `runSwarm` internally manages the loop.
-                  // Actually, to avoid stale state in closure, we'll just run it once for the demo.
-                  showToast("Red Team found a vulnerability! Re-running Blue Team to patch...");
-                  verdict = await runSwarm(`Patch the vulnerabilities found in your original code:\n\nPlease secure it.`);
+                  const patchTask = `The Red Team found these vulnerabilities:\n${swarm.redOutput}\n\nOriginal code:\n${swarm.blueOutput}\n\nPlease patch all vulnerabilities.`;
+                  verdict = await runSwarm(patchTask);
                   iter++;
                 }
               }
@@ -1596,7 +1603,7 @@ export default function Home() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 pb-32">
-          {swarm.role !== "idle" && <SwarmTerminal swarm={swarm} />}
+          {swarm.role !== "idle" && <MemoSwarmTerminal swarm={swarm} />}
           <AnimatePresence>
             {messages.map((msg, idx) => (
               <motion.div 

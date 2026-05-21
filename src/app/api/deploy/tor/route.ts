@@ -8,26 +8,34 @@ import os from "os";
 const execAsync = promisify(exec);
 
 export async function GET() {
+  const { exec } = await import("child_process");
+  const { promisify } = await import("util");
+  const execAsync = promisify(exec);
   try {
     await execAsync("which tor");
-    return NextResponse.json({ torAvailable: true });
+    return Response.json({ torAvailable: true });
   } catch {
-    return NextResponse.json({
+    return Response.json({
       torAvailable: false,
       installInstructions: {
         mac: "brew install tor",
         linux: "sudo apt install tor",
-        windows: "Download from https://www.torproject.org"
+        windows: "Download Tor Expert Bundle from https://www.torproject.org/download/tor/"
       }
     });
   }
 }
 
 export async function POST(req: Request) {
-  if (process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT) {
-    return NextResponse.json({
-      error: "Ghost Deploy requires local deployment. This instance is cloud-hosted."
-    }, { status: 501 });
+  // Block cloud-hosted deployments — Tor requires local binary
+  if (process.env.VERCEL || process.env.RAILWAY_ENVIRONMENT || process.env.FLY_APP_NAME) {
+    return Response.json(
+      {
+        error: "Ghost Deploy requires a local self-hosted deployment.",
+        details: "This instance is running on a cloud provider. Run Rogue Studio locally to use Tor .onion hosting."
+      },
+      { status: 501 }
+    );
   }
 
   try {
@@ -42,15 +50,11 @@ export async function POST(req: Request) {
     // 3. Spawn `tor -f torrc`
     // 4. Return the generated .onion address
     
-    // For now, we simulate the success if tor is installed.
-    await execAsync("which tor");
-    
-    const simulatedOnion = "rogue" + Math.random().toString(36).substring(2, 15) + "v3.onion";
-
-    return NextResponse.json({
-      success: true,
-      url: `http://${simulatedOnion}`,
-      message: `Tor Hidden Service established for ${targetDir}. (Simulation active)`
+    // TODO: Real Tor daemon spawn — requires local binary (detected via GET /api/deploy/tor)
+    return Response.json({
+      status: "simulated",
+      message: "Tor daemon not yet integrated. Use GET /api/deploy/tor to check binary availability.",
+      onionUrl: null
     });
 
   } catch (err: any) {
