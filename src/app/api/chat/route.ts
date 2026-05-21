@@ -18,7 +18,35 @@ export async function POST(req: Request) {
   try {
     const airGapped = req.headers.get("x-air-gap-mode") === "true";
     const body = await req.json();
-    const { messages, model, provider, apiKey } = body;
+    const { messages, model, provider, apiKey: clientApiKey } = body;
+
+    // Detect if request is from localhost
+    const host = req.headers.get("host") || "";
+    const isLocalhost = host.startsWith("localhost") || 
+                        host.startsWith("127.0.0.1");
+
+    // Build a provider-to-env-key map
+    const ENV_KEYS: Record<string, string | undefined> = {
+      openai:      process.env.OPENAI_API_KEY,
+      anthropic:   process.env.ANTHROPIC_API_KEY,
+      gemini:      process.env.GOOGLE_API_KEY,
+      groq:        process.env.GROQ_API_KEY,
+      deepseek:    process.env.DEEPSEEK_API_KEY,
+      together:    process.env.TOGETHER_API_KEY,
+      openrouter:  process.env.OPENROUTER_API_KEY,
+    };
+
+    // Resolve: env takes priority. Client key allowed only on localhost.
+    const apiKey = ENV_KEYS[provider] || 
+                   (isLocalhost ? clientApiKey : undefined);
+
+    // If no key resolved and provider is not ollama, reject
+    if (!apiKey && provider !== "ollama") {
+      return NextResponse.json(
+        { error: "No API key configured. Set it in .env or use Ollama locally." },
+        { status: 401 }
+      );
+    }
 
     if (airGapped && isExternalProvider(provider)) {
       return NextResponse.json(
