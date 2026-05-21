@@ -8,9 +8,6 @@ import os from "os";
 const execAsync = promisify(exec);
 
 export async function GET() {
-  const { exec } = await import("child_process");
-  const { promisify } = await import("util");
-  const execAsync = promisify(exec);
   try {
     await execAsync("which tor");
     return Response.json({ torAvailable: true });

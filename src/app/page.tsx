@@ -1375,10 +1375,10 @@ export default function Home() {
                   setErrorMessage("AIR-GAP VIOLATION: Cannot use external providers.");
                   return;
                 }
-                const task = prompt || "Write a secure server";
+                const userTask = prompt || "Write a secure server";
                 setPrompt("");
                 const MAX_SWARM_ITERATIONS = 3;
-                let verdict = await runSwarm(task);
+                let verdict = await runSwarm(userTask);
                 let iter = 1;
                 while (verdict === "vulnerable" && iter < MAX_SWARM_ITERATIONS) {
                   const patchTask = `The Red Team found these vulnerabilities:\n${swarm.redOutput}\n\nOriginal code:\n${swarm.blueOutput}\n\nPlease patch all vulnerabilities.`;
