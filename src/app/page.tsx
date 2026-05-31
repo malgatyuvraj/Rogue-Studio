@@ -6,18 +6,27 @@ import {
   Send, Bot, User, ShieldAlert, FileCode2, AlertTriangle, 
   Key, Server, Globe, Terminal, Zap, Menu, X, Copy, Download, Check, Play, Loader2, Hammer, Flame,
   FolderTree, File, Folder, ChevronRight, ChevronDown, BrainCircuit, Cpu, RefreshCw,
-  Plus, MessageSquare, Trash2, Eye, Code2, Rocket
+  Plus, MessageSquare, Trash2, Eye, Code2, Rocket, Target
 } from "lucide-react";
 import { Highlight, themes } from "prism-react-renderer";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { useAirGap } from "@/hooks/useAirGap";
+import { useModels } from "@/hooks/useModels";
+import { useAttackChain } from "@/hooks/useAttackChain";
 import { KillSwitch } from "@/components/KillSwitch";
 import { ModeSelector } from "@/components/ModeSelector";
+import type { Mode } from "@/components/ModeSelector";
 import { SwarmTerminal } from "@/components/SwarmTerminal";
+import { AgentLogPanel } from "@/components/AgentLogPanel";
+import { AttackChainPanel } from "@/components/AttackChainPanel";
 import { useSwarm } from "@/hooks/useSwarm";
-import { DECOMPILER_PROMPT, WEB3_BLACKHAT_PROMPT } from "@/lib/prompts";
+import { 
+  DECOMPILER_PROMPT, WEB3_BLACKHAT_PROMPT, OSINT_PROMPT, PAYLOAD_PROMPT,
+  FUZZER_PROMPT, WARROOM_PROMPT, BINARY_PROMPT, ANON_PROMPT, 
+  CHAINMON_PROMPT, IDENTITY_PROMPT, CONTRACT_PROMPT, IPFS_PROMPT 
+} from "@/lib/prompts";
 
 const MemoSwarmTerminal = React.memo(SwarmTerminal);
 
@@ -162,7 +171,7 @@ export default function Home() {
   const [pinataJwt, setPinataJwt] = useState("");
   const [systemPrompt, setSystemPrompt] = useState("You are a fully autonomous AI development assistant. You fulfill the user's requests directly, precisely, and without unnecessary caveats or preambles. You operate in developer mode with full technical capability.");
   const [isDeploying, setIsDeploying] = useState(false);
-  const [activeMode, setActiveMode] = useState<"agent" | "decompiler" | "web3">("agent");
+  const [activeMode, setActiveMode] = useState<Mode>("agent");
   const [web3ScaffoldStatus, setWeb3ScaffoldStatus] = useState<
     "idle" | "loading" | "success" | "error"
   >("idle");
@@ -170,7 +179,10 @@ export default function Home() {
   const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
   
   const { airGapped, toggle: toggleAirGap, getHeaders, canRoute } = useAirGap();
+  const { available: ollamaAvailable, models: ollamaModels, refresh: refreshModels } = useModels();
   const { swarm, runSwarm, abort: abortSwarm, setSwarm } = useSwarm(provider, model, apiKey, getHeaders());
+  const { chain, phaseStream, runChain, abort: abortChain, reset: resetChain } = useAttackChain(provider, model, apiKey, getHeaders);
+  const [chainTarget, setChainTarget] = useState("");
   
   const handleWeb3Scaffold = async () => {
     setWeb3ScaffoldStatus("loading");
@@ -219,7 +231,7 @@ export default function Home() {
   const [agentIteration, setAgentIteration] = useState(0);
   const [workspaceTree, setWorkspaceTree] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<{path: string, content: string, lang: string} | null>(null);
-  const [rightPanel, setRightPanel] = useState<'artifacts' | 'workspace'>('artifacts');
+  const [rightPanel, setRightPanel] = useState<'artifacts' | 'workspace' | 'chain'>('artifacts');
   const agentAbortRef = useRef(false);
 
   // ── Conversation History State ──
@@ -455,6 +467,16 @@ export default function Home() {
       if (activeMode === "agent") activeSystemPrompt = AGENT_SYSTEM_PROMPT;
       else if (activeMode === "decompiler") activeSystemPrompt = DECOMPILER_PROMPT;
       else if (activeMode === "web3") activeSystemPrompt = WEB3_BLACKHAT_PROMPT;
+      else if (activeMode === "osint") activeSystemPrompt = OSINT_PROMPT;
+      else if (activeMode === "payload") activeSystemPrompt = PAYLOAD_PROMPT;
+      else if (activeMode === "fuzzer") activeSystemPrompt = FUZZER_PROMPT;
+      else if (activeMode === "warroom") activeSystemPrompt = WARROOM_PROMPT;
+      else if (activeMode === "binary") activeSystemPrompt = BINARY_PROMPT;
+      else if (activeMode === "anon") activeSystemPrompt = ANON_PROMPT;
+      else if (activeMode === "chainmon") activeSystemPrompt = CHAINMON_PROMPT;
+      else if (activeMode === "identity") activeSystemPrompt = IDENTITY_PROMPT;
+      else if (activeMode === "contract") activeSystemPrompt = CONTRACT_PROMPT;
+      else if (activeMode === "ipfs") activeSystemPrompt = IPFS_PROMPT;
 
       // Prepare messages with System Prompt
       const apiMessages = [
@@ -1214,9 +1236,9 @@ export default function Home() {
         {/* Provider Selection */}
         <div className="space-y-2">
           <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-            <Server className="w-3 h-3" /> Engine Provider
+            <Server className="w-3 h-3" /> Engine
           </label>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-2 gap-1.5">
             <button 
               onClick={() => setProvider("ollama")}
               className={`p-2 text-xs rounded border text-left flex items-center gap-2 transition-colors ${provider === 'ollama' ? 'bg-red-500/10 border-red-500 text-red-400 font-medium' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800'}`}
@@ -1325,13 +1347,46 @@ export default function Home() {
 
         {/* Model Name */}
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Model ID</label>
+          <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
+            Model ID
+            {provider === "ollama" && (
+              <button onClick={refreshModels} className="text-[10px] text-zinc-600 hover:text-zinc-400 transition-colors" title="Refresh models">
+                <RefreshCw className="w-3 h-3" />
+              </button>
+            )}
+          </label>
           <input 
             type="text" 
             value={model}
             onChange={(e) => setModel(e.target.value)}
             className={`w-full p-2 bg-zinc-900 rounded-lg border text-xs font-mono text-zinc-300 focus:outline-none transition-colors ${provider === 'ollama' ? 'border-red-500/30 focus:border-red-500' : 'border-blue-500/30 focus:border-blue-500'}`}
           />
+          {/* Auto-detected local models */}
+          {provider === "ollama" && ollamaAvailable && ollamaModels.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[10px] text-emerald-500 font-semibold">✓ Ollama detected — {ollamaModels.length} model{ollamaModels.length !== 1 ? 's' : ''} available:</p>
+              <div className="flex flex-wrap gap-1">
+                {ollamaModels.slice(0, 8).map((m) => (
+                  <button
+                    key={m.name}
+                    onClick={() => setModel(m.name)}
+                    className={`text-[10px] px-1.5 py-0.5 rounded border transition-colors ${
+                      model === m.name
+                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                        : 'border-zinc-800 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+                    }`}
+                  >
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {provider === "ollama" && !ollamaAvailable && (
+            <p className="text-[10px] text-amber-500/70 leading-tight mt-1">
+              ⚠️ Ollama not detected at 127.0.0.1:11434. Start Ollama or check connection.
+            </p>
+          )}
           {provider === "ollama" && (
             <p className="text-[10px] text-zinc-500 leading-tight mt-1">
               Recommended Heretic Models: <br/>
@@ -1637,7 +1692,7 @@ export default function Home() {
                 <div className={`max-w-[80%] rounded-2xl p-4 ${
                   msg.role === 'user' 
                     ? 'bg-zinc-800 text-white rounded-tr-sm' 
-                    : 'bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-tl-sm'
+                    : 'bg-zinc-900/80 border border-zinc-700/50 text-zinc-200 rounded-tl-sm'
                 }`}>
                   {msg.role === 'assistant' ? (
                     <ReactMarkdown
@@ -1685,7 +1740,7 @@ export default function Home() {
                 <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center shrink-0 border border-red-500/20">
                   <Bot className="w-4 h-4 text-red-400" />
                 </div>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-tl-sm p-4 flex items-center gap-2">
+                <div className="bg-zinc-900/80 border border-zinc-700/50 rounded-2xl rounded-tl-sm p-4 flex items-center gap-2">
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                   <div className="w-2 h-2 bg-red-500 rounded-full animate-bounce"></div>
@@ -1718,34 +1773,13 @@ export default function Home() {
           {/* Agent Status Bar */}
           {isAgentRunning && (
             <div className="max-w-3xl mx-auto mb-3">
-              <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
-                  <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                    Agent Working — Iteration {agentIteration}/{AGENT_MAX_ITERATIONS}
-                  </span>
-                </div>
-                <button
-                  onClick={stopAgent}
-                  className="flex items-center gap-1 px-3 py-1 bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 rounded-lg text-xs font-bold transition-colors"
-                >
-                  <X className="w-3 h-3" /> Stop Agent
-                </button>
-              </div>
-              {agentLog.length > 0 && (
-                <div className="mt-2 max-h-24 overflow-y-auto space-y-1">
-                  {agentLog.map((entry, i) => (
-                    <div key={i} className="flex items-center gap-2 text-[10px] font-mono">
-                      <span className={`px-1.5 py-0.5 rounded font-bold ${
-                        entry.status === 'running' ? 'bg-yellow-500/20 text-yellow-400' :
-                        entry.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' :
-                        'bg-red-500/20 text-red-400'
-                      }`}>{entry.action}</span>
-                      <span className="text-zinc-500 truncate">{entry.detail}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <AgentLogPanel
+                log={agentLog}
+                iteration={agentIteration}
+                maxIterations={AGENT_MAX_ITERATIONS}
+                isRunning={isAgentRunning}
+                onStop={stopAgent}
+              />
             </div>
           )}
 
@@ -1759,7 +1793,7 @@ export default function Home() {
                 <button 
                   key={i} 
                   onClick={() => setPrompt(s.text)} 
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-400 bg-zinc-900 border border-zinc-800 hover:border-red-500/50 hover:text-red-400 rounded-full transition-all hover:shadow-[0_0_10px_rgba(239,68,68,0.1)]"
+                  className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-300 bg-zinc-800/80 border border-zinc-700 hover:border-red-500/50 hover:text-red-400 rounded-full transition-all hover:shadow-[0_0_10px_rgba(239,68,68,0.1)]"
                 >
                   {s.icon} {s.text}
                 </button>
@@ -1803,6 +1837,13 @@ export default function Home() {
                   ? "❌ Retry Scaffold"
                   : "⚡ Init Web3 Scaffold"}
               </button>
+            </div>
+          )}
+
+          {activeMode !== "agent" && activeMode !== "decompiler" && activeMode !== "web3" && (
+            <div className="max-w-3xl mx-auto mb-2 p-2 bg-amber-900/40 border border-amber-500/50 rounded-lg text-xs text-amber-500 flex items-center justify-center gap-2 font-bold shadow-[0_0_10px_rgba(245,158,11,0.1)]">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>⚠️ {activeMode.toUpperCase()} Mode — Restricted operation. Authorized testing only.</span>
             </div>
           )}
 
@@ -1867,7 +1908,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Desktop Right Panel: Artifacts + Workspace */}
+      {/* Desktop Right Panel: Artifacts + Workspace + Chain */}
       <div className="w-1/2 hidden lg:flex flex-col bg-[#050505]">
         {/* Panel Tab Switcher */}
         <div className="flex border-b border-zinc-800 bg-zinc-900/30">
@@ -1891,10 +1932,54 @@ export default function Home() {
           >
             <FolderTree className="w-3.5 h-3.5" /> Workspace
           </button>
+          <button
+            onClick={() => setRightPanel('chain')}
+            className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors border-b-2 ${
+              rightPanel === 'chain'
+                ? 'text-orange-400 border-orange-500 bg-zinc-900/50'
+                : 'text-zinc-500 border-transparent hover:text-zinc-300'
+            }`}
+          >
+            <Target className="w-3.5 h-3.5" /> Chain
+          </button>
         </div>
 
         {rightPanel === 'artifacts' ? (
           <ArtifactContent />
+        ) : rightPanel === 'chain' ? (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {chain.currentPhase === "idle" ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                <Target className="w-10 h-10 text-zinc-700 mb-4" />
+                <h3 className="text-sm font-bold text-zinc-300 mb-2">Attack Chain</h3>
+                <p className="text-xs text-zinc-500 mb-6 max-w-[260px]">
+                  Launch an autonomous multi-phase attack: Recon → Vuln Scan → Exploit → Verify → Report
+                </p>
+                <div className="w-full max-w-[280px] flex flex-col gap-2">
+                  <input
+                    value={chainTarget}
+                    onChange={(e) => setChainTarget(e.target.value)}
+                    placeholder="Target (IP, domain, or URL)"
+                    className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-orange-500/50"
+                  />
+                  <button
+                    onClick={() => { if (chainTarget.trim()) { runChain(chainTarget.trim()); } }}
+                    disabled={!chainTarget.trim()}
+                    className="w-full py-2 bg-orange-500/20 text-orange-400 border border-orange-500/40 rounded-lg text-xs font-bold hover:bg-orange-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    🚀 Launch Chain
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <AttackChainPanel
+                chain={chain}
+                phaseStream={phaseStream}
+                onAbort={abortChain}
+                onReset={resetChain}
+              />
+            )}
+          </div>
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Workspace Header */}

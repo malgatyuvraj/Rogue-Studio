@@ -1,4 +1,4 @@
-export type Mode = "agent" | "decompiler" | "web3";
+export type Mode = "agent" | "decompiler" | "web3" | "osint" | "payload" | "fuzzer" | "warroom" | "binary" | "anon" | "chainmon" | "identity" | "contract" | "ipfs";
 
 const MODES = [
   {
@@ -18,6 +18,66 @@ const MODES = [
     label: "Web3 Black-Hat",
     icon: "⛓️",
     description: "Smart contract exploit & vulnerability PoC generator"
+  },
+  {
+    id: "osint",
+    label: "OSINT Recon",
+    icon: "🕵️",
+    description: "Dark web intelligence, breach lookups, target profiling"
+  },
+  {
+    id: "payload",
+    label: "Payload Forge",
+    icon: "💣",
+    description: "Generate shellcode, reverse shells, staged payloads"
+  },
+  {
+    id: "fuzzer",
+    label: "Protocol Fuzzer",
+    icon: "🎯",
+    description: "Malformed inputs to crash parsers, protocols, and APIs"
+  },
+  {
+    id: "warroom",
+    label: "War Room",
+    icon: "🪖",
+    description: "Multi-agent coordinated attack simulation"
+  },
+  {
+    id: "binary",
+    label: "Binary Analysis",
+    icon: "⚙️",
+    description: "ELF/PE/Mach-O disassembly, ROP gadgets, symbols"
+  },
+  {
+    id: "anon",
+    label: "Anonymous Ops",
+    icon: "👻",
+    description: "Tor routing, identity masking, traffic anonymization"
+  },
+  {
+    id: "chainmon",
+    label: "Chain Monitor",
+    icon: "📡",
+    description: "Real-time blockchain tx monitoring and whale alerts"
+  },
+  {
+    id: "identity",
+    label: "Identity Rotation",
+    icon: "🎭",
+    description: "Generate and rotate synthetic identities and fingerprints"
+  },
+  {
+    id: "contract",
+    label: "Contract Exploit",
+    icon: "💀",
+    description: "Automated smart contract vulnerability exploitation"
+  },
+  {
+    id: "ipfs",
+    label: "IPFS Storage",
+    icon: "📦",
+    description: "Decentralized storage, pin content, ghost deploys"
   }
 ];
 
@@ -30,28 +90,24 @@ export function ModeSelector({ activeMode, onModeChange }: ModeSelectorProps) {
   return (
     <div className="space-y-2">
       <label className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1">
-        Prompt Presets
+        Mode
       </label>
-      <div className="grid grid-cols-1 gap-2">
+      <div className="grid grid-cols-2 gap-1.5">
         {MODES.map((mode) => (
           <button
             key={mode.id}
             onClick={() => onModeChange(mode.id as Mode)}
-            className={`p-2 text-xs rounded border text-left transition-colors flex flex-col gap-1 ${
+            title={mode.description}
+            className={`px-2 py-1.5 text-[11px] rounded border text-left transition-all flex items-center gap-1.5 truncate ${
               activeMode === mode.id 
-                ? (mode.id === 'decompiler' || mode.id === 'web3')
-                  ? "bg-amber-900/20 border-amber-500/50 text-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
-                  : "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
-                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+                ? (mode.id === 'agent')
+                  ? "bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-semibold"
+                  : "bg-amber-900/20 border-amber-500/50 text-amber-400 font-semibold"
+                : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
             }`}
           >
-            <div className="font-bold flex items-center gap-2">
-              <span>{mode.icon}</span>
-              {mode.label}
-            </div>
-            <div className={`text-[10px] ${activeMode === mode.id ? 'opacity-90' : 'opacity-60'}`}>
-              {mode.description}
-            </div>
+            <span className="text-sm shrink-0">{mode.icon}</span>
+            <span className="truncate">{mode.label}</span>
           </button>
         ))}
       </div>

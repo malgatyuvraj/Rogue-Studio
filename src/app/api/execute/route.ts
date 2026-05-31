@@ -4,12 +4,17 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { promisify } from 'util';
+import { assertLocalhost } from '@/lib/security';
 
 const execAsync = promisify(exec);
 
 const WORKSPACE_ROOT = path.resolve(process.cwd(), 'rogue_workspace');
 
 export async function POST(req: Request) {
+  // Security: restrict to localhost unless explicitly disabled
+  const guard = assertLocalhost(req);
+  if (guard) return guard;
+
   try {
     const body = await req.json();
 

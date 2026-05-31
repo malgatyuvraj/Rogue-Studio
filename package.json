@@ -1,12 +1,45 @@
 {
   "name": "rogue-studio",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "The uncensored, self-hostable AI coding IDE for security researchers and Web3 hackers",
+  "keywords": [
+    "ai",
+    "ide",
+    "security",
+    "red-team",
+    "web3",
+    "ollama",
+    "self-hosted",
+    "agentic",
+    "osint",
+    "pentesting"
+  ],
+  "author": "malgatyuvraj",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/malgatyuvraj/Rogue-Studio.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "lint:fix": "eslint --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:coverage": "vitest run --coverage",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\"",
+    "typecheck": "tsc --noEmit",
+    "validate": "npm run lint && npm run typecheck && npm test && npm run build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:build": "docker build -t rogue-studio ."
   },
   "dependencies": {
     "@web3-storage/w3up-client": "^17.3.0",
@@ -22,13 +55,16 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "prettier": "^3.8.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

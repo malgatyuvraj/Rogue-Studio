@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.github
+.env.local
+.env
+.env.*.local
+rogue_workspace
+tests
+coverage
+*.log
+*.md
+!README.md
+.DS_Store
+.vscode
+.idea
+lint-results.json

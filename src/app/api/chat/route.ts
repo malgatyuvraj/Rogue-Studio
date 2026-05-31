@@ -23,6 +23,17 @@ export async function POST(req: Request) {
     const body = await req.json() as RequestBody;
     const { messages, model, provider, apiKey: clientApiKey } = body;
 
+    // Air-gap enforcement FIRST — reject external providers immediately
+    if (airGapped && isExternalProvider(provider)) {
+      return NextResponse.json(
+        {
+          error: "AIR-GAP VIOLATION",
+          details: `Provider '${provider}' is external. Air-Gapped mode only permits Ollama (local).`
+        },
+        { status: 403 }
+      );
+    }
+
     // Detect if request is from localhost
     const host = req.headers.get("host") || "";
     const isLocalhost = host.startsWith("localhost") || 
@@ -48,16 +59,6 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "No API key configured. Set it in .env or use Ollama locally." },
         { status: 401 }
-      );
-    }
-
-    if (airGapped && isExternalProvider(provider)) {
-      return NextResponse.json(
-        {
-          error: "AIR-GAP VIOLATION",
-          details: `Provider '${provider}' is external. Air-Gapped mode only permits Ollama (local).`
-        },
-        { status: 403 }
       );
     }
 

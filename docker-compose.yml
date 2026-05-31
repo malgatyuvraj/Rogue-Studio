@@ -1,0 +1,66 @@
+# ══════════════════════════════════════════════════════════════
+# Rogue Studio — Docker Compose
+# Bundles the app + Ollama sidecar + Tor + IPFS for zero-config self-hosting
+# ══════════════════════════════════════════════════════════════
+
+services:
+  rogue-studio:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - LOCALHOST_ONLY=false
+      - TOR_SOCKS_PROXY=socks5h://tor:9050
+      - IPFS_GATEWAY=http://ipfs:8080/ipfs/
+    volumes:
+      - workspace_data:/app/rogue_workspace
+    depends_on:
+      ollama:
+        condition: service_started
+      tor:
+        condition: service_started
+      ipfs:
+        condition: service_started
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    # Uncomment for GPU passthrough (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  tor:
+    image: dperson/torproxy:latest
+    ports:
+      - "9050:9050"   # SOCKS5 proxy
+      - "9051:9051"   # Control port
+    environment:
+      - TOR_NewCircuitPeriod=30
+      - PASSWORD=${TOR_CONTROL_PASSWORD:-roguestudio}
+    restart: unless-stopped
+
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "4001:4001"   # Swarm
+      - "5001:5001"   # API
+      - "8080:8080"   # Gateway
+    volumes:
+      - ipfs_data:/data/ipfs
+    restart: unless-stopped
+
+volumes:
+  workspace_data:
+  ollama_models:
+  ipfs_data:

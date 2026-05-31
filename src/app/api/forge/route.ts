@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
+import { assertLocalhost, sanitizeCommandArg } from '@/lib/security';
 
 export async function POST(req: Request) {
+  // Security: restrict to localhost unless explicitly disabled
+  const guard = assertLocalhost(req);
+  if (guard) return guard;
+
   try {
     const { modelId } = await req.json();
     
     if (!modelId) {
       return NextResponse.json({ error: "Model ID is required" }, { status: 400 });
+    }
+
+    // Security: sanitize modelId to prevent command injection
+    const safeModelId = sanitizeCommandArg(modelId);
+    if (!safeModelId) {
+      return NextResponse.json(
+        { error: "Invalid model ID. Only alphanumeric, hyphens, dots, slashes, and colons are allowed." },
+        { status: 400 }
+      );
     }
 
     const stream = new ReadableStream({
@@ -17,11 +31,11 @@ export async function POST(req: Request) {
         // We assume heretic-master is adjacent to the studio folder
         const hereticDir = path.resolve(process.cwd(), '../../heretic-master');
         
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: `Initializing Model Forge...\nTarget Model: ${modelId}\nWorking Directory: ${hereticDir}\n\nRunning: uv run heretic ${modelId}\n\n` })}\n\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: `Initializing Model Forge...\nTarget Model: ${safeModelId}\nWorking Directory: ${hereticDir}\n\nRunning: uv run heretic ${safeModelId}\n\n` })}\n\n`));
         
-        const child = spawn('uv', ['run', 'heretic', modelId], {
+        const child = spawn('uv', ['run', 'heretic', safeModelId], {
           cwd: hereticDir,
-          shell: true
+          shell: false
         });
         
         child.stdout.on('data', (data) => {

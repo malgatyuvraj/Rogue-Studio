@@ -1,11 +1,16 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { assertLocalhost } from '@/lib/security';
 
 // All workspace operations are sandboxed to this directory
 const WORKSPACE_ROOT = path.resolve(process.cwd(), 'rogue_workspace');
 
 export async function POST(req: Request) {
+  // Security: restrict to localhost unless explicitly disabled
+  const guard = assertLocalhost(req);
+  if (guard) return guard;
+
   try {
     const { filepath, content } = await req.json();
 
