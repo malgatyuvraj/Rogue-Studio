@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# lint artifacts
+lint-results.json
+
+# typescript build info
+tsconfig.tsbuildinfo
+
 # agent workspace (runtime-generated files)
 /rogue_workspace
 

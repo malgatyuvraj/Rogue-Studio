@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 
 interface OllamaModel {
   name: string;
@@ -24,6 +24,7 @@ export function useModels() {
     loading: true,
     error: null,
   });
+  const didFetch = useRef<boolean | null>(null);
 
   const refresh = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
@@ -46,10 +47,11 @@ export function useModels() {
     }
   }, []);
 
-  // Auto-fetch on mount
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
+  // Auto-fetch once on first render
+  if (didFetch.current == null) {
+    didFetch.current = true;
+    queueMicrotask(() => refresh());
+  }
 
   return { ...state, refresh };
 }

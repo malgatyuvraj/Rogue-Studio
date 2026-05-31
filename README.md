@@ -60,28 +60,28 @@ Switch between specialized AI modes instantly. Each mode rewires the entire AI p
 
 ## ⚔️ Why Rogue Studio Replaces Everything Else
 
-| Capability | Rogue Studio | Cursor | Copilot | Bolt.new | Windsurf |
-|---------|:---:|:---:|:---:|:---:|:---:|
-| 13 specialized offensive/defensive modes | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Autonomous agent (writes + executes + loops) | ✅ | ✅ | ❌ | ✅ | ✅ |
-| Red/Blue adversarial swarm audit | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Multi-phase attack chain automation | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Self-hosted / fully air-gapped | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Local LLM via Ollama (zero internet) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Zero content filters / safety wrappers | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Ghost deploy (IPFS + Tor .onion) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Payload generation + shellcode factory | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Smart contract exploit engine | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 5-agent war room coordination | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Binary analysis (ROP, secrets, imports) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Blockchain MEV + mempool surveillance | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Identity/persona rotation toolkit | ✅ | ❌ | ❌ | ❌ | ❌ |
-| OSINT / dark web intelligence | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Protocol fuzzing + crash triage | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Plugin system (extend anything) | ✅ | ✅ | ✅ | ❌ | ❌ |
-| 8 AI providers (switch in 1 click) | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Docker one-command full stack | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Free & open source forever (MIT) | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Capability | Rogue Studio | Others |
+|---------|:---:|:---:|
+| 13 specialized offensive/defensive modes | ✅ | ❌ |
+| Autonomous agent (writes + executes + loops) | ✅ | Partial |
+| Red/Blue adversarial swarm audit | ✅ | ❌ |
+| Multi-phase attack chain automation | ✅ | ❌ |
+| Self-hosted / fully air-gapped | ✅ | ❌ |
+| Local LLM via Ollama (zero internet) | ✅ | ❌ |
+| Zero content filters / safety wrappers | ✅ | ❌ |
+| Ghost deploy (IPFS + Tor .onion) | ✅ | ❌ |
+| Payload generation + shellcode factory | ✅ | ❌ |
+| Smart contract exploit engine | ✅ | ❌ |
+| 5-agent war room coordination | ✅ | ❌ |
+| Binary analysis (ROP, secrets, imports) | ✅ | ❌ |
+| Blockchain MEV + mempool surveillance | ✅ | ❌ |
+| Identity/persona rotation toolkit | ✅ | ❌ |
+| OSINT / dark web intelligence | ✅ | ❌ |
+| Protocol fuzzing + crash triage | ✅ | ❌ |
+| Plugin system (extend anything) | ✅ | Rare |
+| 8 AI providers (switch in 1 click) | ✅ | ❌ |
+| Docker one-command full stack | ✅ | ❌ |
+| Free & open source forever (MIT) | ✅ | ❌ |
 
 ---
 
